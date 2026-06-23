@@ -1,10 +1,22 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Inter, Instrument_Serif, Cormorant_Garamond } from "next/font/google";
 import "./globals.css";
 import { ProductsProvider } from "@/lib/products-context";
 import { ToastProvider } from "@/components/Toast";
 
-const inter = Inter({ subsets: ["latin"] });
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
+const instrumentSerif = Instrument_Serif({
+  subsets: ["latin"],
+  weight: "400",
+  style: ["normal", "italic"],
+  variable: "--font-serif",
+});
+const cormorant = Cormorant_Garamond({
+  subsets: ["latin"],
+  weight: ["300", "400", "500"],
+  style: ["normal", "italic"],
+  variable: "--font-display",
+});
 
 export const metadata: Metadata = {
   title: "URBN ",
@@ -14,7 +26,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className={inter.className}>
+      <body className={`${inter.variable} ${instrumentSerif.variable} ${cormorant.variable} font-sans`}>
         <ProductsProvider><ToastProvider>{children}</ToastProvider></ProductsProvider>
       </body>
     </html>

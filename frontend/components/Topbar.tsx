@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Modal } from "./Modal";
 import { useProducts } from "@/lib/products-context";
 import { getSession, Session } from "@/lib/auth";
-import { Menu } from "lucide-react";
+import { Menu, Search } from "lucide-react";
 import { NotificationBell } from "./NotificationBell";
 
 const PRIORITY_OPTIONS = ["Urgent", "P1 — High", "P2 — Medium", "P3 — Low"];
@@ -26,7 +26,7 @@ const emptyForm = {
 };
 
   export function Topbar({ onMenuClick }: { onMenuClick: () => void }) {
-  const { addProduct } = useProducts();
+  const { addProduct, search, setSearch } = useProducts();
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -67,26 +67,37 @@ const emptyForm = {
 
   return (
     <>
-      <div className="flex items-center justify-between gap-3 border-b border-[#1a3a6e]/50 bg-[#03102b]/70 px-4 py-4 backdrop-blur sm:px-8">
+      <div className="flex items-center gap-3 border-b border-[#1a3a6e]/40 bg-[#010916]/85 backdrop-blur-sm px-4 py-3 sm:px-6">
         <button
           onClick={onMenuClick}
-          className="rounded-lg p-2 text-[#ddeeff] transition hover:bg-[#1a3a6e]/30 md:hidden"
+          className="rounded p-2 text-[#90bce0] transition hover:bg-[#0d1f3c] hover:text-[#ddeeff] md:hidden"
         >
-          <Menu size={20} />
+          <Menu size={18} />
         </button>
 
-        <div className="flex flex-1 items-center justify-end gap-2 sm:gap-3">
+        {/* Search */}
+        <div className="relative flex-1 max-w-sm">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#3a5a8a]" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search products or factories…"
+            className="w-full rounded border border-[#1a3a6e]/50 bg-[#0d1f3c] py-2 pl-8 pr-3 text-sm text-[#ddeeff] placeholder-[#3a5a8a] outline-none focus:border-[#38bdf8]/50 focus:ring-0"
+          />
+        </div>
+
+        <div className="flex items-center gap-2 ml-auto">
           {session && (
-            <p className="hidden text-sm text-[#90bce0] sm:block">
-              Hi, <span className="font-medium text-[#ddeeff]">{session.name}</span>
+            <p className="hidden text-sm text-[#5a8fc4] sm:block">
+              Hi, <span className="text-[#ddeeff]">{session.name}</span>
             </p>
           )}
           <NotificationBell />
           <button
             onClick={() => setAddOpen(true)}
-            className="rounded-full bg-[#1a4a8a] px-4 py-2 text-sm font-medium text-[#ddeeff] transition hover:bg-[#1e57a8] sm:px-5"
+            className="rounded bg-[#1a4a8a] px-4 py-2 text-sm font-medium text-[#ddeeff] transition hover:bg-[#1e57a8]"
           >
-            + New Product
+            + Add Product
           </button>
         </div>
       </div>
@@ -101,7 +112,7 @@ const emptyForm = {
 
         <form onSubmit={handleSubmit} className="mt-5 space-y-5">
           <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-[#90bce0]">
+            <label className="mb-1 block text-xs font-normal uppercase tracking-wide text-[#90bce0]">
               Product name *
             </label>
             <input
@@ -109,13 +120,13 @@ const emptyForm = {
               value={form.productName}
               onChange={(e) => update("productName", e.target.value)}
               placeholder="e.g. Aria Knit Tee"
-              className="w-full rounded-xl border border-[#1a3a6e]/50 bg-[#060f26] px-3 py-2.5 text-sm text-[#ddeeff] outline-none focus:border-[#2a6aaa]"
+              className="w-full rounded-md border border-[#1a3a6e]/50 bg-[#060f26] px-3 py-2.5 text-sm text-[#ddeeff] outline-none focus:border-[#2a6aaa]"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-[#90bce0]">
+              <label className="mb-1 block text-xs font-normal uppercase tracking-wide text-[#90bce0]">
                 Factory *
               </label>
               <input
@@ -123,11 +134,11 @@ const emptyForm = {
                 value={form.factory}
                 onChange={(e) => update("factory", e.target.value)}
                 placeholder="e.g. Shenzhen PowerTech"
-                className="w-full rounded-xl border border-[#1a3a6e]/50 bg-[#060f26] px-3 py-2.5 text-sm text-[#ddeeff] outline-none focus:border-[#2a6aaa]"
+                className="w-full rounded-md border border-[#1a3a6e]/50 bg-[#060f26] px-3 py-2.5 text-sm text-[#ddeeff] outline-none focus:border-[#2a6aaa]"
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-[#90bce0]">
+              <label className="mb-1 block text-xs font-normal uppercase tracking-wide text-[#90bce0]">
                 Factory SKU *
               </label>
               <input
@@ -135,20 +146,20 @@ const emptyForm = {
                 value={form.factorySku}
                 onChange={(e) => update("factorySku", e.target.value)}
                 placeholder="e.g. UPR136"
-                className="w-full rounded-xl border border-[#1a3a6e]/50 bg-[#060f26] px-3 py-2.5 text-sm text-[#ddeeff] outline-none focus:border-[#2a6aaa]"
+                className="w-full rounded-md border border-[#1a3a6e]/50 bg-[#060f26] px-3 py-2.5 text-sm text-[#ddeeff] outline-none focus:border-[#2a6aaa]"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-[#90bce0]">
+              <label className="mb-1 block text-xs font-normal uppercase tracking-wide text-[#90bce0]">
                 Priority *
               </label>
               <select
                 value={form.priority}
                 onChange={(e) => update("priority", e.target.value)}
-                className="w-full rounded-xl border border-[#1a3a6e]/50 bg-[#060f26] px-3 py-2.5 text-sm text-[#ddeeff] outline-none focus:border-[#2a6aaa]"
+                className="w-full rounded-md border border-[#1a3a6e]/50 bg-[#060f26] px-3 py-2.5 text-sm text-[#ddeeff] outline-none focus:border-[#2a6aaa]"
               >
                 {PRIORITY_OPTIONS.map((p) => (
                   <option key={p}>{p}</option>
@@ -156,13 +167,13 @@ const emptyForm = {
               </select>
             </div>
             <div>
-              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-[#90bce0]">
+              <label className="mb-1 block text-xs font-normal uppercase tracking-wide text-[#90bce0]">
                 Assign to QA *
               </label>
               <select
                 value={form.assignedQa}
                 onChange={(e) => update("assignedQa", e.target.value)}
-                className="w-full rounded-xl border border-[#1a3a6e]/50 bg-[#060f26] px-3 py-2.5 text-sm text-[#ddeeff] outline-none focus:border-[#2a6aaa]"
+                className="w-full rounded-md border border-[#1a3a6e]/50 bg-[#060f26] px-3 py-2.5 text-sm text-[#ddeeff] outline-none focus:border-[#2a6aaa]"
               >
                 {QA_OPTIONS.map((q) => (
                   <option key={q}>{q}</option>
@@ -172,7 +183,7 @@ const emptyForm = {
           </div>
 
           <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-[#90bce0]">
+            <label className="mb-1 block text-xs font-normal uppercase tracking-wide text-[#90bce0]">
               Specifications
             </label>
             <textarea
@@ -180,11 +191,11 @@ const emptyForm = {
               onChange={(e) => update("specifications", e.target.value)}
               placeholder="Capacity, wattage, key specs..."
               rows={3}
-              className="w-full rounded-xl border border-[#1a3a6e]/50 bg-[#060f26] px-3 py-2.5 text-sm text-[#ddeeff] outline-none focus:border-[#2a6aaa]"
+              className="w-full rounded-md border border-[#1a3a6e]/50 bg-[#060f26] px-3 py-2.5 text-sm text-[#ddeeff] outline-none focus:border-[#2a6aaa]"
             />
           </div>
 
-          <div className="rounded-xl bg-[#0a1e42] p-4">
+          <div className="rounded-md bg-[#0a1e42] p-4">
             <div className="flex items-center justify-between">
               <label className="text-sm font-medium text-[#ddeeff]">Sample received?</label>
               <button
@@ -203,21 +214,21 @@ const emptyForm = {
             </div>
             {form.sampleReceived && (
               <div className="mt-3">
-                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-[#90bce0]">
+                <label className="mb-1 block text-xs font-normal uppercase tracking-wide text-[#90bce0]">
                   Date given to QA team
                 </label>
                 <input
                   type="date"
                   value={form.sampleGivenDate}
                   onChange={(e) => update("sampleGivenDate", e.target.value)}
-                  className="w-full rounded-xl border border-[#1a3a6e]/50 bg-[#060f26] px-3 py-2.5 text-sm text-[#ddeeff] outline-none focus:border-[#2a6aaa]"
+                  className="w-full rounded-md border border-[#1a3a6e]/50 bg-[#060f26] px-3 py-2.5 text-sm text-[#ddeeff] outline-none focus:border-[#2a6aaa]"
                 />
               </div>
             )}
           </div>
 
           <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-[#90bce0]">
+            <label className="mb-1 block text-xs font-normal uppercase tracking-wide text-[#90bce0]">
               Deadline *
             </label>
             <input
@@ -225,12 +236,12 @@ const emptyForm = {
               type="date"
               value={form.deadline}
               onChange={(e) => update("deadline", e.target.value)}
-              className="w-full rounded-xl border border-[#1a3a6e]/50 bg-[#060f26] px-3 py-2.5 text-sm text-[#ddeeff] outline-none focus:border-[#2a6aaa]"
+              className="w-full rounded-md border border-[#1a3a6e]/50 bg-[#060f26] px-3 py-2.5 text-sm text-[#ddeeff] outline-none focus:border-[#2a6aaa]"
             />
           </div>
 
           <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-[#90bce0]">
+            <label className="mb-1 block text-xs font-normal uppercase tracking-wide text-[#90bce0]">
               Product image
             </label>
             <input
@@ -253,7 +264,7 @@ const emptyForm = {
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="relative w-full overflow-hidden rounded-xl border-2 border-dashed border-[#1a3a6e]/50 bg-[#060f26] text-sm text-[#90bce0] hover:bg-[#0a1e42]"
+              className="relative w-full overflow-hidden rounded-md border-2 border-dashed border-[#1a3a6e]/50 bg-[#060f26] text-sm text-[#90bce0] hover:bg-[#0a1e42]"
             >
               {imageDataUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -271,13 +282,13 @@ const emptyForm = {
             <button
               type="button"
               onClick={() => setAddOpen(false)}
-              className="flex-1 rounded-xl border border-[#1a3a6e]/50 bg-[#060f26] py-2.5 text-sm font-medium text-[#90bce0] hover:bg-[#0a1e42]"
+              className="flex-1 rounded-md border border-[#1a3a6e]/50 bg-[#060f26] py-2.5 text-sm font-medium text-[#90bce0] hover:bg-[#0a1e42]"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="flex-1 rounded-xl bg-[#3b2f23] py-2.5 text-sm font-medium text-[#ddeeff] hover:opacity-90"
+              className="flex-1 rounded-md bg-[#3b2f23] py-2.5 text-sm font-medium text-[#ddeeff] hover:opacity-90"
             >
               Add to Intake
             </button>

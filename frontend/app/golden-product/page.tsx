@@ -7,6 +7,7 @@ import { useProducts, ProductRow, GoldenWorkflow, GoldenSampleStatus, ActivityEn
 import { PRIORITY_DOT } from "@/lib/colors";
 import { Chip } from "@/components/Chip";
 import { getSession } from "@/lib/auth";
+import type { Role } from "@/lib/auth";
 import { useToast } from "@/components/Toast";
 
 function fmt(v: string | null) {
@@ -55,9 +56,9 @@ function LogPanel({ entries }: { entries: ActivityEntry[] }) {
 function Field({ label, value, onChange, type = "text", placeholder, disabled }: { label: string; value: string; onChange?: (v: string) => void; type?: string; placeholder?: string; disabled?: boolean }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-[#90bce0]">{label}</span>
+      <span className="mb-1 block text-xs font-normal uppercase tracking-wide text-[#90bce0]">{label}</span>
       <input type={type} value={value} onChange={onChange ? (e) => onChange(e.target.value) : undefined} placeholder={placeholder} disabled={disabled}
-        className="w-full rounded-xl border border-[#1a3a6e]/50 bg-[#0a1e42] px-3 py-2.5 text-sm text-[#ddeeff] outline-none focus:border-[#2a6aaa] placeholder:text-[#5a8fc4] disabled:opacity-50 disabled:cursor-not-allowed" />
+        className="w-full rounded-md border border-[#1a3a6e]/50 bg-[#0a1e42] px-3 py-2.5 text-sm text-[#ddeeff] outline-none focus:border-[#2a6aaa] placeholder:text-[#5a8fc4] disabled:opacity-50 disabled:cursor-not-allowed" />
     </label>
   );
 }
@@ -65,7 +66,7 @@ function Field({ label, value, onChange, type = "text", placeholder, disabled }:
 function TrackCard({ title, color, done, children }: { title: string; color: string; done: boolean; children: React.ReactNode }) {
   const [open, setOpen] = useState(true);
   return (
-    <div className={`rounded-xl border ${done ? "border-green-500/30 bg-green-500/5" : "border-[#1a3a6e]/40 bg-[#060f26]/60"} overflow-hidden`}>
+    <div className={`rounded-md border ${done ? "border-green-500/30 bg-green-500/5" : "border-[#1a3a6e]/40 bg-[#060f26]"} overflow-hidden`}>
       <button onClick={() => setOpen(!open)} className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-[#0a1e42]/30">
         <div className="flex items-center gap-2">
           {done ? <CheckCircle size={14} className="text-green-400" /> : <Circle size={14} className="text-[#1a3a6e]" />}
@@ -132,11 +133,13 @@ function GoldenCard({ product, isQA }: { product: ProductRow; isQA: boolean }) {
     showToast("Purchase team notified");
   }
 
+  const NOTIFY_ALL: Role[] = ["CEO", "Dev", "Purchase"];
+
   function confirmOrder() {
     const t = now();
     patch((w) => ({ ...w, orderConfirmedAt: t, purchaseLog: [...w.purchaseLog, { action: "Order confirmed by purchase team", timestamp: t }] }));
     log({ action: "Order confirmed by purchase team", timestamp: t });
-    addNotification({ targetRoles: ["CEO", "QA"], productId: product.id, productName: product.codeName, message: "Order confirmed — product details can now be filled in." });
+    addNotification({ targetRoles: NOTIFY_ALL, productId: product.id, productName: product.codeName, message: "Order confirmed — product details can now be filled in." });
     showToast("Order confirmed");
   }
 
@@ -146,6 +149,7 @@ function GoldenCard({ product, isQA }: { product: ProductRow; isQA: boolean }) {
     const isEdit = !!gw.details;
     patch((w) => ({ ...w, details: saved }));
     log({ action: isEdit ? "Product details updated" : "Product details saved", timestamp: t, note: `${saved.productName} · ${saved.skuCode}` });
+    addNotification({ targetRoles: NOTIFY_ALL, productId: product.id, productName: product.codeName, message: isEdit ? "Product details updated." : `Product details saved — ${saved.productName} · ${saved.skuCode}` });
     showToast(isEdit ? "Details updated" : "Details saved");
   }
 
@@ -162,6 +166,7 @@ function GoldenCard({ product, isQA }: { product: ProductRow; isQA: boolean }) {
       },
     }));
     log(entry);
+    addNotification({ targetRoles: NOTIFY_ALL, productId: product.id, productName: product.codeName, message: isNew ? "Compliance review started." : "Compliance details updated." });
     showToast(isNew ? "Compliance review started" : "Compliance updated");
   }
 
@@ -170,6 +175,7 @@ function GoldenCard({ product, isQA }: { product: ProductRow; isQA: boolean }) {
     const entry: ActivityEntry = { action: "Compliance confirmed", timestamp: t };
     patch((w) => ({ ...w, compliance: w.compliance ? { ...w.compliance, confirmedAt: t, log: [...w.compliance.log, entry] } : w.compliance }));
     log(entry);
+    addNotification({ targetRoles: NOTIFY_ALL, productId: product.id, productName: product.codeName, message: "Compliance confirmed ✓" });
     showToast("Compliance confirmed");
   }
 
@@ -178,6 +184,7 @@ function GoldenCard({ product, isQA }: { product: ProductRow; isQA: boolean }) {
     const entry: ActivityEntry = { action: label, timestamp: t };
     patch((w) => ({ ...w, packaging: w.packaging ? { ...w.packaging, [field]: t, log: [...w.packaging.log, entry] } : w.packaging }));
     log(entry);
+    addNotification({ targetRoles: NOTIFY_ALL, productId: product.id, productName: product.codeName, message: label });
     showToast(label);
   }
 
@@ -197,6 +204,7 @@ function GoldenCard({ product, isQA }: { product: ProductRow; isQA: boolean }) {
       },
     }));
     log(entry);
+    addNotification({ targetRoles: NOTIFY_ALL, productId: product.id, productName: product.codeName, message: `Packaging started — vendor: ${packDraft.vendorName}` });
     showToast("Packaging started");
   }
 
@@ -205,6 +213,7 @@ function GoldenCard({ product, isQA }: { product: ProductRow; isQA: boolean }) {
     const entry: ActivityEntry = { action: `Key line drawing uploaded — ${fileName}`, timestamp: t };
     patch((w) => ({ ...w, packaging: w.packaging ? { ...w.packaging, keyLineDrawingAt: t, keyLineDrawingImageUrl: dataUrl, keyLineDrawingApprovedAt: null, keyLineDrawingRejectedAt: null, log: [...w.packaging.log, entry] } : w.packaging }));
     log(entry);
+    addNotification({ targetRoles: NOTIFY_ALL, productId: product.id, productName: product.codeName, message: `Key line drawing uploaded — awaiting approval.` });
     showToast("Key line drawing uploaded");
   }
 
@@ -214,6 +223,7 @@ function GoldenCard({ product, isQA }: { product: ProductRow; isQA: boolean }) {
     const entry: ActivityEntry = { action, timestamp: t };
     patch((w) => ({ ...w, packaging: w.packaging ? { ...w.packaging, keyLineDrawingApprovedAt: approved ? t : null, keyLineDrawingRejectedAt: approved ? null : t, log: [...w.packaging.log, entry] } : w.packaging }));
     log(entry);
+    addNotification({ targetRoles: NOTIFY_ALL, productId: product.id, productName: product.codeName, message: action });
     showToast(action);
   }
 
@@ -222,6 +232,7 @@ function GoldenCard({ product, isQA }: { product: ProductRow; isQA: boolean }) {
     const entry: ActivityEntry = { action: `Artwork uploaded — ${fileName}`, timestamp: t };
     patch((w) => ({ ...w, packaging: w.packaging ? { ...w.packaging, artworkStartedAt: t, artworkImageUrl: dataUrl, artworkApprovedAt: null, artworkRejectedAt: null, log: [...w.packaging.log, entry] } : w.packaging }));
     log(entry);
+    addNotification({ targetRoles: NOTIFY_ALL, productId: product.id, productName: product.codeName, message: `Artwork uploaded — awaiting approval.` });
     showToast("Artwork uploaded");
   }
 
@@ -231,6 +242,7 @@ function GoldenCard({ product, isQA }: { product: ProductRow; isQA: boolean }) {
     const entry: ActivityEntry = { action, timestamp: t };
     patch((w) => ({ ...w, packaging: w.packaging ? { ...w.packaging, artworkApprovedAt: approved ? t : null, artworkRejectedAt: approved ? null : t, log: [...w.packaging.log, entry] } : w.packaging }));
     log(entry);
+    addNotification({ targetRoles: NOTIFY_ALL, productId: product.id, productName: product.codeName, message: action });
     showToast(action);
   }
 
@@ -248,6 +260,7 @@ function GoldenCard({ product, isQA }: { product: ProductRow; isQA: boolean }) {
       },
     }));
     log(entry);
+    addNotification({ targetRoles: NOTIFY_ALL, productId: product.id, productName: product.codeName, message: `Golden sample status: ${gsDraft.status}` });
     showToast(`Golden sample: ${gsDraft.status}`);
   }
 
@@ -258,11 +271,11 @@ function GoldenCard({ product, isQA }: { product: ProductRow; isQA: boolean }) {
   const progress = stagesDone.filter(Boolean).length;
 
   return (
-    <div className="rounded-2xl border border-[#1a3a6e]/50 bg-[#060f26]/80 overflow-hidden">
+    <div className="rounded-lg border border-[#1a3a6e]/50 bg-[#060f26] overflow-hidden">
       {/* Header */}
       <div className="flex flex-wrap items-center gap-3 border-b border-[#1a3a6e]/40 px-6 py-4">
         <div className="flex-1 min-w-0">
-          <p className="text-lg font-bold text-white">{product.codeName}</p>
+          <p className="text-xl font-semibold text-white">{product.codeName}</p>
           <p className="text-xs text-[#90bce0] mt-0.5">{product.skuCode} · Deadline <span className="text-[#f0c060] font-semibold">{new Date(product.deadline).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span></p>
         </div>
         <Chip color={PRIORITY_DOT[product.priority]} label={product.priority} />
@@ -280,19 +293,19 @@ function GoldenCard({ product, isQA }: { product: ProductRow; isQA: boolean }) {
       <div className="p-6 space-y-3">
 
         {/* Stage 1 — Purchase */}
-        <div className="rounded-xl border border-[#1a3a6e]/40 bg-[#060f26]/60 px-5 py-4">
+        <div className="rounded-md border border-[#1a3a6e]/40 bg-[#060f26] px-5 py-4">
           <p className="mb-3 text-xs font-bold uppercase tracking-wider text-[#90bce0]">1 — Purchase</p>
           <div className="space-y-1">
             <div className="flex items-center justify-between gap-3">
               <Step done={!!gw.purchaseNotifiedAt} label="Purchase team notified" timestamp={gw.purchaseNotifiedAt} />
               {!gw.purchaseNotifiedAt && !isQA && (
-                <button onClick={notifyPurchase} className="shrink-0 rounded-lg bg-[#1a4a8a] px-3 py-1.5 text-xs font-semibold text-[#ddeeff] hover:opacity-90">Notify</button>
+                <button onClick={notifyPurchase} className="shrink-0 rounded-lg bg-[#1a4a8a] px-3 py-1.5 text-xs font-medium text-[#ddeeff] hover:opacity-90">Notify</button>
               )}
             </div>
             <div className="flex items-center justify-between gap-3">
               <Step done={!!gw.orderConfirmedAt} label="Order confirmed" timestamp={gw.orderConfirmedAt} pending={gw.purchaseNotifiedAt ? "Awaiting purchase confirmation" : "—"} />
               {gw.purchaseNotifiedAt && !gw.orderConfirmedAt && !isQA && (
-                <button onClick={confirmOrder} className="shrink-0 rounded-lg bg-[#1a4a8a] px-3 py-1.5 text-xs font-semibold text-[#ddeeff] hover:opacity-90">Confirm order</button>
+                <button onClick={confirmOrder} className="shrink-0 rounded-lg bg-[#1a4a8a] px-3 py-1.5 text-xs font-medium text-[#ddeeff] hover:opacity-90">Confirm order</button>
               )}
             </div>
           </div>
@@ -300,7 +313,7 @@ function GoldenCard({ product, isQA }: { product: ProductRow; isQA: boolean }) {
         </div>
 
         {/* Stage 2 — Product Details */}
-        <div className={`rounded-xl border px-5 py-4 ${detailsLocked ? "border-[#1a3a6e]/20 opacity-50" : "border-[#1a3a6e]/40 bg-[#060f26]/60"}`}>
+        <div className={`rounded-md border px-5 py-4 ${detailsLocked ? "border-[#1a3a6e]/20 opacity-50" : "border-[#1a3a6e]/40 bg-[#060f26]"}`}>
           <p className="mb-1 text-xs font-bold uppercase tracking-wider text-[#90bce0]">2 — Product Details</p>
           {detailsLocked ? (
             <p className="text-xs text-[#3a5a8a]">Unlocks after order is confirmed.</p>
@@ -314,7 +327,7 @@ function GoldenCard({ product, isQA }: { product: ProductRow; isQA: boolean }) {
                 <Field label="Markings" value={detailDraft.markings} onChange={isQA ? undefined : (v) => setDetailDraft((d) => ({ ...d, markings: v }))} placeholder="e.g. Embossed logo, EU label" disabled={isQA} />
               </div>
               {!isQA && (
-                <button onClick={saveDetails} className="w-full rounded-xl bg-[#1a4a8a] py-2.5 text-sm font-semibold text-[#ddeeff] hover:opacity-90">
+                <button onClick={saveDetails} className="w-full rounded-md bg-[#1a4a8a] py-2.5 text-sm font-medium text-[#ddeeff] hover:opacity-90">
                   {gw.details ? "Update details" : "Save details"}
                 </button>
               )}
@@ -335,11 +348,11 @@ function GoldenCard({ product, isQA }: { product: ProductRow; isQA: boolean }) {
                     <Field label="Status" value={compDraft.status} onChange={(v) => setCompDraft((d) => ({ ...d, status: v }))} placeholder="e.g. Under review" />
                     <Field label="Expected date" type="date" value={compDraft.expectedDate} onChange={(v) => setCompDraft((d) => ({ ...d, expectedDate: v }))} />
                     <div className="flex gap-2">
-                      <button onClick={saveCompliance} className="flex-1 rounded-xl bg-[#1a3a6e]/60 py-2 text-xs font-semibold text-[#ddeeff] hover:bg-[#1a4a8a]">
+                      <button onClick={saveCompliance} className="flex-1 rounded-md bg-[#1a3a6e]/60 py-2 text-xs font-medium text-[#ddeeff] hover:bg-[#1a4a8a]">
                         {gw.compliance ? "Update" : "Start"}
                       </button>
                       {gw.compliance && !gw.compliance.confirmedAt && (
-                        <button onClick={confirmCompliance} className="flex-1 rounded-xl border border-green-500/40 bg-green-500/10 py-2 text-xs font-semibold text-green-400 hover:bg-green-500/20">
+                        <button onClick={confirmCompliance} className="flex-1 rounded-md border border-green-500/40 bg-green-500/10 py-2 text-xs font-medium text-green-400 hover:bg-green-500/20">
                           Mark confirmed
                         </button>
                       )}
@@ -365,7 +378,7 @@ function GoldenCard({ product, isQA }: { product: ProductRow; isQA: boolean }) {
                     <div className="space-y-3">
                       <Field label="Vendor name" value={packDraft.vendorName} onChange={(v) => setPackDraft((d) => ({ ...d, vendorName: v }))} placeholder="e.g. PackCo Ltd" />
                       <Field label="Packaging sample ID" value={packDraft.sampleId} onChange={(v) => setPackDraft((d) => ({ ...d, sampleId: v }))} placeholder="e.g. PKG-0091" />
-                      <button onClick={initPackaging} disabled={!packDraft.vendorName} className="w-full rounded-xl bg-[#1a3a6e]/60 py-2 text-xs font-semibold text-[#ddeeff] hover:bg-[#1a4a8a] disabled:opacity-40">
+                      <button onClick={initPackaging} disabled={!packDraft.vendorName} className="w-full rounded-md bg-[#1a3a6e]/60 py-2 text-xs font-medium text-[#ddeeff] hover:bg-[#1a4a8a] disabled:opacity-40">
                         Start packaging
                       </button>
                     </div>
@@ -384,7 +397,7 @@ function GoldenCard({ product, isQA }: { product: ProductRow; isQA: boolean }) {
                     {/* Key Line Drawing */}
                     {gw.packaging.sampleReceivedAt && (
                       <div className="rounded-lg border border-[#1a3a6e]/40 bg-[#020b1e]/40 p-3 space-y-2">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-[#90bce0]">Key Line Drawing</p>
+                        <p className="text-xs font-normal uppercase tracking-wide text-[#90bce0]">Key Line Drawing</p>
 
                         {gw.packaging.keyLineDrawingImageUrl ? (
                           <>
@@ -393,8 +406,8 @@ function GoldenCard({ product, isQA }: { product: ProductRow; isQA: boolean }) {
                             <p className="text-[10px] text-[#5a8fc4]">Uploaded {fmt(gw.packaging.keyLineDrawingAt)}</p>
                             {!gw.packaging.keyLineDrawingApprovedAt && !gw.packaging.keyLineDrawingRejectedAt && !isQA && (
                               <div className="flex gap-2">
-                                <button onClick={() => decideKeyLineDrawing(true)} className="flex-1 rounded-lg border border-green-500/40 bg-green-500/10 py-1.5 text-xs font-semibold text-green-400 hover:bg-green-500/20">Approve</button>
-                                <button onClick={() => decideKeyLineDrawing(false)} className="flex-1 rounded-lg border border-red-500/40 bg-red-500/10 py-1.5 text-xs font-semibold text-red-400 hover:bg-red-500/20">Reject</button>
+                                <button onClick={() => decideKeyLineDrawing(true)} className="flex-1 rounded-lg border border-green-500/40 bg-green-500/10 py-1.5 text-xs font-medium text-green-400 hover:bg-green-500/20">Approve</button>
+                                <button onClick={() => decideKeyLineDrawing(false)} className="flex-1 rounded-lg border border-red-500/40 bg-red-500/10 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/20">Reject</button>
                               </div>
                             )}
                             {gw.packaging.keyLineDrawingApprovedAt && <p className="flex items-center gap-1 text-xs text-green-400"><CheckCircle size={11} /> Approved {fmt(gw.packaging.keyLineDrawingApprovedAt)}</p>}
@@ -428,7 +441,7 @@ function GoldenCard({ product, isQA }: { product: ProductRow; isQA: boolean }) {
                     {/* Artwork */}
                     {gw.packaging.keyLineDrawingApprovedAt && (
                       <div className="rounded-lg border border-[#1a3a6e]/40 bg-[#020b1e]/40 p-3 space-y-2">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-[#90bce0]">Artwork</p>
+                        <p className="text-xs font-normal uppercase tracking-wide text-[#90bce0]">Artwork</p>
 
                         {gw.packaging.artworkImageUrl ? (
                           <>
@@ -437,8 +450,8 @@ function GoldenCard({ product, isQA }: { product: ProductRow; isQA: boolean }) {
                             <p className="text-[10px] text-[#5a8fc4]">Uploaded {fmt(gw.packaging.artworkStartedAt)}</p>
                             {!gw.packaging.artworkApprovedAt && !gw.packaging.artworkRejectedAt && !isQA && (
                               <div className="flex gap-2">
-                                <button onClick={() => decideArtwork(true)} className="flex-1 rounded-lg border border-green-500/40 bg-green-500/10 py-1.5 text-xs font-semibold text-green-400 hover:bg-green-500/20">Approve</button>
-                                <button onClick={() => decideArtwork(false)} className="flex-1 rounded-lg border border-red-500/40 bg-red-500/10 py-1.5 text-xs font-semibold text-red-400 hover:bg-red-500/20">Reject</button>
+                                <button onClick={() => decideArtwork(true)} className="flex-1 rounded-lg border border-green-500/40 bg-green-500/10 py-1.5 text-xs font-medium text-green-400 hover:bg-green-500/20">Approve</button>
+                                <button onClick={() => decideArtwork(false)} className="flex-1 rounded-lg border border-red-500/40 bg-red-500/10 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/20">Reject</button>
                               </div>
                             )}
                             {gw.packaging.artworkApprovedAt && <p className="flex items-center gap-1 text-xs text-green-400"><CheckCircle size={11} /> Approved {fmt(gw.packaging.artworkApprovedAt)}</p>}
@@ -474,7 +487,7 @@ function GoldenCard({ product, isQA }: { product: ProductRow; isQA: boolean }) {
                       <div>
                         <Step done={!!gw.packaging.releasedAt} label="Released (packaging + user manual)" timestamp={gw.packaging.releasedAt} />
                         {!isQA && !gw.packaging.releasedAt && (
-                          <button onClick={() => setPackagingStep("releasedAt", "Packaging and user manual released")} className="ml-6 mt-1 rounded-lg border border-green-500/40 bg-green-500/10 px-3 py-1 text-xs font-semibold text-green-400 hover:bg-green-500/20">Mark released</button>
+                          <button onClick={() => setPackagingStep("releasedAt", "Packaging and user manual released")} className="ml-6 mt-1 rounded-lg border border-green-500/40 bg-green-500/10 px-3 py-1 text-xs font-medium text-green-400 hover:bg-green-500/20">Mark released</button>
                         )}
                       </div>
                     )}
@@ -490,7 +503,7 @@ function GoldenCard({ product, isQA }: { product: ProductRow; isQA: boolean }) {
                 {!isQA && (
                   <>
                     <div>
-                      <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-[#90bce0]">Status</span>
+                      <span className="mb-1.5 block text-xs font-normal uppercase tracking-wide text-[#90bce0]">Status</span>
                       <div className="grid grid-cols-4 gap-1.5">
                         {(["Not started", "Requested", "In progress", "Received"] as GoldenSampleStatus[]).map((s) => (
                           <button key={s} type="button" onClick={() => setGsDraft((d) => ({ ...d, status: s }))}
@@ -501,7 +514,7 @@ function GoldenCard({ product, isQA }: { product: ProductRow; isQA: boolean }) {
                       </div>
                     </div>
                     <Field label="Expected date" type="date" value={gsDraft.expectedDate} onChange={(v) => setGsDraft((d) => ({ ...d, expectedDate: v }))} />
-                    <button onClick={saveGoldenSample} className="w-full rounded-xl bg-[#1a3a6e]/60 py-2 text-xs font-semibold text-[#ddeeff] hover:bg-[#1a4a8a]">
+                    <button onClick={saveGoldenSample} className="w-full rounded-md bg-[#1a3a6e]/60 py-2 text-xs font-medium text-[#ddeeff] hover:bg-[#1a4a8a]">
                       {gw.goldenSample ? "Update" : "Start tracking"}
                     </button>
                   </>
@@ -518,7 +531,7 @@ function GoldenCard({ product, isQA }: { product: ProductRow; isQA: boolean }) {
             </TrackCard>
           </div>
         ) : gw.orderConfirmedAt ? (
-          <div className="rounded-xl border border-dashed border-[#1a3a6e]/50 px-5 py-4 text-xs text-[#5a8fc4]">
+          <div className="rounded-md border border-dashed border-[#1a3a6e]/50 px-5 py-4 text-xs text-[#5a8fc4]">
             Complete Stage 2 (product details) to unlock the parallel tracks.
           </div>
         ) : null}
@@ -548,13 +561,18 @@ function MiniProgress({ stages }: { stages: boolean[] }) {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function GoldenProductPage() {
-  const { products } = useProducts();
+  const { products, search } = useProducts();
   const [isQA, setIsQA] = useState(false);
   const [selectedId, setSelectedId] = useState<number | null>(null);
 
   useEffect(() => { setIsQA(getSession()?.role === "QA"); }, []);
 
-  const approved = products.filter((p) => p.status === "Approved" && p.goldenWorkflow);
+  const q = search.toLowerCase();
+  const approved = products.filter((p) => {
+    if (p.status !== "Approved" || !p.goldenWorkflow) return false;
+    if (q) return p.codeName.toLowerCase().includes(q) || (p.factory ?? "").toLowerCase().includes(q) || p.skuCode.toLowerCase().includes(q);
+    return true;
+  });
 
   // Auto-select first product
   useEffect(() => {
@@ -570,7 +588,7 @@ export default function GoldenProductPage() {
       {isQA && <p className="mt-1 text-xs text-[#f0c060]">You are in read-only mode.</p>}
 
       {approved.length === 0 ? (
-        <div className="mt-8 rounded-xl border border-dashed border-[#1a3a6e]/50 px-5 py-16 text-center text-sm text-[#5a8fc4]">
+        <div className="mt-8 rounded-md border border-dashed border-[#1a3a6e]/50 px-5 py-16 text-center text-sm text-[#5a8fc4]">
           No approved products yet. Approve a product from NPD Testing.
         </div>
       ) : (
@@ -584,8 +602,8 @@ export default function GoldenProductPage() {
               const active = p.id === (selected?.id ?? -1);
               return (
                 <button key={p.id} onClick={() => setSelectedId(p.id)}
-                  className={`shrink-0 rounded-xl border px-4 py-3 text-left transition min-w-[160px] ${active ? "border-[#38bdf8]/60 bg-[#0a1e42]" : "border-[#1a3a6e]/40 bg-[#060f26]/60 hover:bg-[#0a1e42]/60"}`}>
-                  <p className={`text-sm font-semibold truncate ${active ? "text-white" : "text-[#90bce0]"}`}>{p.codeName}</p>
+                  className={`shrink-0 rounded-md border px-4 py-3 text-left transition min-w-[160px] ${active ? "border-[#38bdf8]/60 bg-[#0a1e42]" : "border-[#1a3a6e]/40 bg-[#060f26] hover:bg-[#0a1e42]/60"}`}>
+                  <p className={`text-sm font-medium truncate ${active ? "text-white" : "text-[#90bce0]"}`}>{p.codeName}</p>
                   <p className="text-[10px] text-[#5a8fc4] mt-0.5 tabular-nums">{done}/5 complete</p>
                   <MiniProgress stages={stages} />
                 </button>

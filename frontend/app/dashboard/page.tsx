@@ -9,10 +9,10 @@ import { Modal } from "@/components/Modal";
 import { Chip } from "@/components/Chip";
 import { useProducts, Status, ProductRow } from "@/lib/products-context";
 import { STATUS_DOT, PRIORITY_DOT } from "@/lib/colors";
+import { GridBeam } from "@/components/ui/grid-beam";
 
 type ActiveFilter = "All" | "Pending NPD" | "Pending Decision" | "Approved" | "On hold";
 const ACTIVE_FILTERS: ActiveFilter[] = ["All", "Pending NPD", "Pending Decision", "Approved", "On hold"];
-const GOLDEN_SAMPLE_OPTIONS = ["Not started", "Requested", "In progress", "Received"] as const;
 
 function formatTimestamp(value: string | null) {
   if (!value) return null;
@@ -36,41 +36,25 @@ function TimelineRow({ label, value, pending }: { label: string; value: string |
   );
 }
 
-function FormField({
-  label,
-  value,
-  onChange,
-  placeholder,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  placeholder?: string;
-}) {
-  return (
-    <label className="block">
-      <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-[#90bce0]">{label}</span>
-      <input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className="w-full rounded-xl border border-[#1a3a6e]/50 bg-[#060f26]/80 px-3 py-2.5 text-sm text-[#ddeeff] outline-none focus:border-[#3b2f23]"
-      />
-    </label>
-  );
-}
 
 export default function DashboardPage() {
-  const { products, setProducts, addNotification } = useProducts();
+  const { products, setProducts, addNotification, search } = useProducts();
   const { showToast } = useToast();
   const [filter, setFilter] = useState<ActiveFilter>("All");
   const [activeId, setActiveId] = useState<number | null>(null);
   const [viewId, setViewId] = useState<number | null>(null);
-  const [draft, setDraft] = useState({ qaName: "", qaSkuCode: "", qaColour: "", qaMarkings: "", goldenSampleExpectedDate: "" });
-  const [draftStatus, setDraftStatus] = useState<typeof GOLDEN_SAMPLE_OPTIONS[number]>("Not started");
 
-  const activeProducts = products.filter((p) => p.status !== "Rejected");
-  const archivedProducts = products.filter((p) => p.status === "Rejected");
+  const q = search.toLowerCase();
+  const activeProducts = products.filter((p) => {
+    if (p.status === "Rejected") return false;
+    if (q) return p.codeName.toLowerCase().includes(q) || (p.factory ?? "").toLowerCase().includes(q) || p.skuCode.toLowerCase().includes(q);
+    return true;
+  });
+  const archivedProducts = products.filter((p) => {
+    if (p.status !== "Rejected") return false;
+    if (q) return p.codeName.toLowerCase().includes(q) || (p.factory ?? "").toLowerCase().includes(q) || p.skuCode.toLowerCase().includes(q);
+    return true;
+  });
 
   const counts = {
     All: activeProducts.length,
@@ -81,8 +65,11 @@ export default function DashboardPage() {
   };
 
   const totalAll = products.length;
-  const approvedCount = products.filter((p) => p.status === "Approved").length;
-  const approvalRate = totalAll ? Math.round((approvedCount / totalAll) * 100) : 0;
+  const rejectedCount = products.filter((p) => p.status === "Rejected").length;
+  const rejectionRate = totalAll ? Math.round((rejectedCount / totalAll) * 100) : 0;
+  const priorityData = (["Urgent", "High", "Medium", "Low"] as const)
+    .map((pr) => ({ name: pr, value: activeProducts.filter((p) => p.priority === pr).length, color: PRIORITY_DOT[pr] }))
+    .filter((d) => d.value > 0);
 
   const chartData = (["Pending NPD", "Pending Decision", "Approved", "On hold", "Rejected"] as Status[]).map((status) => ({
     name: status,
@@ -95,51 +82,8 @@ export default function DashboardPage() {
 
   function openProduct(p: ProductRow) {
     setActiveId(p.id);
-    if (p.approvedWorkflow) {
-      setDraft({
-        qaName: p.approvedWorkflow.qaName,
-        qaSkuCode: p.approvedWorkflow.qaSkuCode,
-        qaColour: p.approvedWorkflow.qaColour,
-        qaMarkings: p.approvedWorkflow.qaMarkings,
-        goldenSampleExpectedDate: p.approvedWorkflow.goldenSampleExpectedDate,
-      });
-      setDraftStatus(p.approvedWorkflow.goldenSampleStatus);
-    } else {
-      setDraft({ qaName: "", qaSkuCode: "", qaColour: "", qaMarkings: "", goldenSampleExpectedDate: "" });
-      setDraftStatus("Not started");
-    }
   }
 
-  function decideHold(action: "EMAIL_FACTORY" | "DROP") {
-    if (!active) return;
-    setProducts((prev) =>
-      prev.map((p) => {
-        if (p.id !== active.id) return p;
-        if (action === "DROP") return { ...p, status: "Rejected" as Status, statusChangedAt: new Date().toISOString() };
-        return {
-          ...p,
-          statusChangedAt: new Date().toISOString(),
-          factoryComm: {
-            decidedAction: "EMAIL_FACTORY" as const,
-            decidedAt: new Date().toISOString(),
-            acknowledgedAt: null,
-            replyAt: null,
-            replyText: null,
-            tentativeReturnDate: null,
-            editHistory: [],
-          },
-        };
-      })
-    );
-    if (active) {
-      if (action === "DROP") {
-        addNotification({ targetRoles: ["CEO"], productId: active.id, productName: active.codeName, message: "Product has been dropped and rejected." });
-      } else {
-        addNotification({ targetRoles: ["Dev"], productId: active.id, productName: active.codeName, message: "Factory has been emailed — acknowledge when ready." });
-      }
-    }
-    showToast(action === "EMAIL_FACTORY" ? "Factory emailed — Dev notified" : "Product dropped — CEO notified");
-  }
 
   function restoreProduct(productId: number, productName: string) {
     const now = new Date().toISOString();
@@ -152,61 +96,6 @@ export default function DashboardPage() {
     showToast("Product restored to Pending NPD");
   }
 
-  function notifyPurchase() {
-    if (!active) return;
-    setProducts((prev) =>
-      prev.map((p) =>
-        p.id === active.id
-          ? {
-              ...p,
-              approvedWorkflow: {
-                purchaseNotifiedAt: new Date().toISOString(),
-                orderConfirmedAt: null,
-                qaName: "",
-                qaSkuCode: "",
-                qaColour: "",
-                qaMarkings: "",
-                goldenSampleStatus: "Not started",
-                goldenSampleExpectedDate: "",
-              },
-            }
-          : p
-      )
-    );
-  }
-
-  function confirmOrder() {
-    if (!active?.approvedWorkflow) return;
-    setProducts((prev) =>
-      prev.map((p) =>
-        p.id === active.id && p.approvedWorkflow
-          ? { ...p, approvedWorkflow: { ...p.approvedWorkflow, orderConfirmedAt: new Date().toISOString() } }
-          : p
-      )
-    );
-  }
-
-  function saveApprovedDetails() {
-    if (!active?.approvedWorkflow) return;
-    setProducts((prev) =>
-      prev.map((p) =>
-        p.id === active.id && p.approvedWorkflow
-          ? {
-              ...p,
-              approvedWorkflow: {
-                ...p.approvedWorkflow,
-                qaName: draft.qaName,
-                qaSkuCode: draft.qaSkuCode,
-                qaColour: draft.qaColour,
-                qaMarkings: draft.qaMarkings,
-                goldenSampleStatus: draftStatus,
-                goldenSampleExpectedDate: draft.goldenSampleExpectedDate,
-              },
-            }
-          : p
-      )
-    );
-  }
 
   return (
     <AppShell>
@@ -222,7 +111,7 @@ export default function DashboardPage() {
             { label: "On hold", value: counts["On hold"], color: STATUS_DOT["On hold"] },
           ] as const
         ).map((kpi) => (
-          <div key={kpi.label} className="rounded-xl border border-[#1a3a6e]/40 bg-[#060f26]/80 px-5 py-4">
+          <div key={kpi.label} className="rounded-md border border-[#1a3a6e]/40 bg-[#060f26] px-5 py-4">
             <p className="text-xs font-medium uppercase tracking-wide text-[#5a8fc4]">{kpi.label}</p>
             <p className="mt-1 text-3xl font-semibold tabular-nums" style={{ color: kpi.color }}>
               {kpi.value}
@@ -231,34 +120,59 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      <div className="mt-6 rounded-xl border border-[#1a3a6e]/40 bg-[#060f26]/80 p-6">
-        <h2 className="text-base font-semibold text-white">Approval breakdown</h2>
-        <div className="mt-4 flex flex-col items-center gap-6 sm:flex-row">
-          <div className="relative h-44 w-44 shrink-0">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={chartData} dataKey="value" nameKey="name" innerRadius={55} outerRadius={80} paddingAngle={2} stroke="none">
-                  {chartData.map((entry) => (
-                    <Cell key={entry.name} fill={entry.color} />
-                  ))}
-                </Pie>
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-              <span className="text-2xl font-semibold tabular-nums text-[#ddeeff]">{approvalRate}%</span>
-              <span className="text-xs text-[#90bce0]">approved</span>
+      <div className="mt-6 grid gap-4 lg:grid-cols-2">
+
+        {/* Status donut — rejection rate */}
+        <div className="rounded-md border border-[#1a3a6e]/40 bg-[#060f26] p-5">
+          <p className="text-xs font-normal uppercase tracking-wide text-[#5a8fc4]">Status breakdown</p>
+          <div className="mt-3 flex items-center gap-5">
+            <div className="relative h-36 w-36 shrink-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={chartData} dataKey="value" nameKey="name" innerRadius={42} outerRadius={64} paddingAngle={2} stroke="none">
+                    {chartData.map((entry) => <Cell key={entry.name} fill={entry.color} />)}
+                  </Pie>
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                <span className="text-xl font-bold tabular-nums text-[#a14a3d]">{rejectionRate}%</span>
+                <span className="text-[10px] text-[#90bce0]">rejected</span>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              {chartData.map((entry) => (
+                <div key={entry.name} className="flex items-center gap-2 text-xs text-[#90bce0]">
+                  <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: entry.color }} />
+                  <span className="truncate">{entry.name}</span>
+                  <span className="ml-auto font-semibold tabular-nums text-[#ddeeff]">{entry.value}</span>
+                </div>
+              ))}
             </div>
           </div>
-          <div className="space-y-2">
-            {chartData.map((entry) => (
-              <div key={entry.name} className="flex items-center gap-2 text-sm text-[#90bce0]">
-                <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: entry.color }} />
-                {entry.name}
-                <span className="font-medium tabular-nums text-[#ddeeff]">{entry.value}</span>
-              </div>
-            ))}
+        </div>
+
+        {/* Priority breakdown bars */}
+        <div className="rounded-md border border-[#1a3a6e]/40 bg-[#060f26] p-5">
+          <p className="text-xs font-normal uppercase tracking-wide text-[#5a8fc4]">Priority split</p>
+          <div className="mt-4 space-y-3">
+            {(["Urgent", "High", "Medium", "Low"] as const).map((pr) => {
+              const count = activeProducts.filter((p) => p.priority === pr).length;
+              const pct = activeProducts.length ? Math.round((count / activeProducts.length) * 100) : 0;
+              return (
+                <div key={pr}>
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="font-medium" style={{ color: PRIORITY_DOT[pr] }}>{pr}</span>
+                    <span className="tabular-nums text-[#ddeeff]">{count} <span className="text-[#5a8fc4]">({pct}%)</span></span>
+                  </div>
+                  <div className="h-2 rounded-full bg-[#0a1e42] overflow-hidden">
+                    <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: PRIORITY_DOT[pr] }} />
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
+
       </div>
 
       <div className="mt-6 flex flex-wrap gap-2">
@@ -266,10 +180,10 @@ export default function DashboardPage() {
           <button
             key={f}
             onClick={() => setFilter(f)}
-            className={`rounded-full border px-4 py-1.5 text-sm transition ${
+            className={`rounded border px-4 py-1.5 text-sm transition ${
               filter === f
                 ? "border-[#2a6aaa] bg-[#1a4a8a] text-[#ddeeff]"
-                : "border-[#1a3a6e]/50 bg-[#060f26]/80 text-[#90bce0] hover:bg-[#0a1e42]"
+                : "border-[#1a3a6e]/50 bg-[#060f26] text-[#90bce0] hover:bg-[#0a1e42]"
             }`}
           >
             {f} <span className="ml-1 opacity-70 tabular-nums">{counts[f]}</span>
@@ -277,7 +191,7 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      <div className="mt-6 overflow-hidden rounded-xl border border-[#1a3a6e]/40 bg-[#060f26]/80">
+      <GridBeam rows={6} cols={8} colorVariant="ocean" theme="dark" active className="mt-6 overflow-hidden rounded-md border border-[#1a3a6e]/40 bg-[#060f26]/80">
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b border-[#1a3a6e]/40 text-[#ddeeff]">
@@ -286,7 +200,7 @@ export default function DashboardPage() {
               <th className="px-5 py-3 font-medium">Priority</th>
               <th className="px-5 py-3 font-medium">Status</th>
               <th className="px-5 py-3 font-medium">Assigned On</th>
-              <th className="px-5 py-3 text-right font-medium">Deadline</th>
+              <th className="px-5 py-3 text-right font-medium w-36 whitespace-nowrap">Deadline</th>
               <th className="px-5 py-3" />
             </tr>
           </thead>
@@ -315,7 +229,7 @@ export default function DashboardPage() {
                   <td className="px-5 py-4 tabular-nums text-[#f0c060]">
                     {p.statusChangedAt ? formatTimestamp(p.statusChangedAt) : "—"}
                   </td>
-                  <td className="px-5 py-4 text-right tabular-nums text-[#f0c060]">{p.deadline}</td>
+                  <td className="px-5 py-4 text-right tabular-nums text-[#f0c060] whitespace-nowrap">{new Date(p.deadline).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</td>
                   <td className="px-5 py-4 text-right">
                     <button
                       onClick={(e) => { e.stopPropagation(); setViewId(p.id); }}
@@ -329,20 +243,19 @@ export default function DashboardPage() {
             )}
           </tbody>
         </table>
-      </div>
+      </GridBeam>
 
       {archivedProducts.length > 0 && (
         <div className="mt-10">
           <h2 className="text-base font-semibold text-[#90bce0]">Archived</h2>
           <p className="mt-1 text-sm text-[#5a8fc4]">Rejected products — kept for record, out of the active pipeline.</p>
-          <div className="mt-3 overflow-hidden rounded-xl border border-[#1a3a6e]/40 bg-[#0a1e42]">
+          <div className="mt-3 overflow-hidden rounded-md border border-[#1a3a6e]/40 bg-[#0a1e42]">
             <table className="w-full text-left text-sm">
               <thead>
                 <tr className="border-b border-[#1a3a6e]/40 text-[#5a8fc4]">
                   <th className="px-5 py-3 font-medium">Code name</th>
                   <th className="px-5 py-3 font-medium">Factory SKU code</th>
-                  <th className="px-5 py-3 font-medium">Priority</th>
-                  <th className="px-5 py-3 font-medium">Status</th>
+                  <th className="px-5 py-3 font-medium">Rejected by</th>
                   <th className="px-5 py-3 text-right font-medium">Rejected on</th>
                   <th className="px-5 py-3 font-medium"></th>
                 </tr>
@@ -352,9 +265,6 @@ export default function DashboardPage() {
                   <tr key={p.id} className="border-b border-[#1a3a6e]/30 last:border-0 opacity-70">
                     <td className="px-5 py-4 text-[#90bce0]">{p.codeName}</td>
                     <td className="px-5 py-4 text-[#5a8fc4]">{p.skuCode}</td>
-                    <td className="px-5 py-4">
-                      <Chip color={PRIORITY_DOT[p.priority]} label={p.priority} />
-                    </td>
                     <td className="px-5 py-4">
                       <Chip color={STATUS_DOT[p.status]} label={p.status} />
                     </td>
@@ -380,50 +290,22 @@ export default function DashboardPage() {
           <div>
             <h2 className="text-lg font-semibold text-[#ddeeff]">{active.codeName}</h2>
             <p className="mt-1 text-sm text-[#90bce0]">{active.skuCode} — on hold</p>
-
-            {!active.factoryComm?.decidedAction ? (
-              <div className="mt-6">
-                <p className="text-sm text-[#90bce0]">No action taken yet. Choose one:</p>
-                <div className="mt-4 flex gap-3">
-                  <button
-                    onClick={() => decideHold("EMAIL_FACTORY")}
-                    className="flex-1 rounded-xl bg-[#1a4a8a] py-2.5 text-sm font-medium text-[#ddeeff] hover:opacity-90"
-                  >
-                    Email factory
-                  </button>
-                  <button
-                    onClick={() => decideHold("DROP")}
-                    className="flex-1 rounded-xl border border-[#1a3a6e]/50 bg-[#060f26]/80 py-2.5 text-sm font-medium text-[#e05a5a] hover:bg-[#0a1e42]"
-                  >
-                    Drop product
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="mt-6">
-                <TimelineRow label="Emailed factory" value={active.factoryComm.decidedAt} pending="—" />
-                <TimelineRow label="Dev team acknowledged" value={active.factoryComm.acknowledgedAt} pending="Awaiting acknowledgement" />
-                <TimelineRow label="Factory replied" value={active.factoryComm.replyAt} pending="Awaiting reply" />
-                {active.factoryComm.replyText && (
-                  <div className="mt-3 rounded-xl bg-[#0a1e42] p-3">
-                    <p className="text-xs uppercase tracking-wide text-[#5a8fc4]">Reply</p>
-                    <p className="mt-1 text-sm text-[#ddeeff]">{active.factoryComm.replyText}</p>
-                    {active.factoryComm.tentativeReturnDate && (
-                      <p className="mt-2 text-xs text-[#90bce0]">
-                        Tentative return date: {active.factoryComm.tentativeReturnDate}
-                      </p>
-                    )}
-                  </div>
+            <p className="mt-2 text-xs text-[#5a8fc4]">Manage this product from the NPD Testing page.</p>
+            <div className="mt-5 space-y-0">
+              <TimelineRow label="Factory emailed" value={active.factoryComm?.decidedAt ?? null} pending="No action yet" />
+              <TimelineRow label="Dev acknowledged" value={active.factoryComm?.acknowledgedAt ?? null} pending="Pending" />
+              <TimelineRow label="Factory replied" value={active.factoryComm?.replyAt ?? null} pending="Pending" />
+            </div>
+            {active.factoryComm?.replyText && (
+              <div className="mt-3 rounded-md bg-[#0a1e42] p-3">
+                <p className="text-xs uppercase tracking-wide text-[#5a8fc4]">Reply</p>
+                <p className="mt-1 text-sm text-[#ddeeff]">{active.factoryComm.replyText}</p>
+                {active.factoryComm.tentativeReturnDate && (
+                  <p className="mt-1 text-xs text-[#90bce0]">Return date: {active.factoryComm.tentativeReturnDate}</p>
                 )}
               </div>
             )}
-
-            <button
-              onClick={() => setActiveId(null)}
-              className="mt-6 w-full rounded-xl border border-[#1a3a6e]/50 bg-[#060f26]/80 py-2 text-sm text-[#90bce0] hover:bg-[#0a1e42]"
-            >
-              Close
-            </button>
+            <button onClick={() => setActiveId(null)} className="mt-6 w-full rounded-md border border-[#1a3a6e]/50 bg-[#060f26] py-2 text-sm text-[#90bce0] hover:bg-[#0a1e42]">Close</button>
           </div>
         )}
 
@@ -431,88 +313,16 @@ export default function DashboardPage() {
           <div>
             <h2 className="text-lg font-semibold text-[#ddeeff]">{active.codeName}</h2>
             <p className="mt-1 text-sm text-[#90bce0]">{active.skuCode} — approved</p>
-
-            {!active.approvedWorkflow ? (
-              <div className="mt-6">
-                <p className="text-sm text-[#90bce0]">Notify the purchase team to start the order workflow.</p>
-                <button
-                  onClick={notifyPurchase}
-                  className="mt-4 w-full rounded-xl bg-[#1a4a8a] py-2.5 text-sm font-medium text-[#ddeeff] hover:opacity-90"
-                >
-                  Notify purchase team
-                </button>
-              </div>
-            ) : (
-              <div className="mt-6">
-                <TimelineRow label="Purchase team notified" value={active.approvedWorkflow.purchaseNotifiedAt} pending="—" />
-                <TimelineRow label="Order placement confirmed" value={active.approvedWorkflow.orderConfirmedAt} pending="Awaiting confirmation" />
-
-                {!active.approvedWorkflow.orderConfirmedAt ? (
-                  <button
-                    onClick={confirmOrder}
-                    className="mt-4 w-full rounded-xl bg-[#1a4a8a] py-2.5 text-sm font-medium text-[#ddeeff] hover:opacity-90"
-                  >
-                    Confirm order placed
-                  </button>
-                ) : (
-                  <div className="mt-5 space-y-4">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-[#90bce0]">
-                      QA + CEO product details
-                    </p>
-                    <FormField label="Name" value={draft.qaName} onChange={(v) => setDraft((d) => ({ ...d, qaName: v }))} placeholder="Product name" />
-                    <FormField label="SKU code" value={draft.qaSkuCode} onChange={(v) => setDraft((d) => ({ ...d, qaSkuCode: v }))} placeholder="Internal SKU" />
-                    <FormField label="Colour" value={draft.qaColour} onChange={(v) => setDraft((d) => ({ ...d, qaColour: v }))} placeholder="e.g. Slate Blue" />
-                    <FormField
-                      label="Markings (logo, rating label)"
-                      value={draft.qaMarkings}
-                      onChange={(v) => setDraft((d) => ({ ...d, qaMarkings: v }))}
-                      placeholder="e.g. Embossed logo, EU rating label"
-                    />
-
-                    <div>
-                      <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-[#90bce0]">
-                        Golden sample status
-                      </label>
-                      <select
-                        value={draftStatus}
-                        onChange={(e) => setDraftStatus(e.target.value as typeof GOLDEN_SAMPLE_OPTIONS[number])}
-                        className="w-full rounded-xl border border-[#1a3a6e]/50 bg-[#060f26]/80 px-3 py-2.5 text-sm text-[#ddeeff] outline-none focus:border-[#3b2f23]"
-                      >
-                        {GOLDEN_SAMPLE_OPTIONS.map((o) => (
-                          <option key={o}>{o}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-[#90bce0]">
-                        Golden sample expected date
-                      </label>
-                      <input
-                        type="date"
-                        value={draft.goldenSampleExpectedDate}
-                        onChange={(e) => setDraft((d) => ({ ...d, goldenSampleExpectedDate: e.target.value }))}
-                        className="w-full rounded-xl border border-[#1a3a6e]/50 bg-[#060f26]/80 px-3 py-2.5 text-sm text-[#ddeeff] outline-none focus:border-[#3b2f23]"
-                      />
-                    </div>
-
-                    <button
-                      onClick={saveApprovedDetails}
-                      className="w-full rounded-xl bg-[#1a4a8a] py-2.5 text-sm font-medium text-[#ddeeff] hover:opacity-90"
-                    >
-                      Save details
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-
-            <button
-              onClick={() => setActiveId(null)}
-              className="mt-6 w-full rounded-xl border border-[#1a3a6e]/50 bg-[#060f26]/80 py-2 text-sm text-[#90bce0] hover:bg-[#0a1e42]"
-            >
-              Close
-            </button>
+            <p className="mt-2 text-xs text-[#5a8fc4]">Manage the full workflow from the Golden Product page.</p>
+            <div className="mt-5 space-y-0">
+              <TimelineRow label="Purchase notified" value={active.goldenWorkflow?.purchaseNotifiedAt ?? null} pending="Not yet" />
+              <TimelineRow label="Order confirmed" value={active.goldenWorkflow?.orderConfirmedAt ?? null} pending="Pending" />
+              <TimelineRow label="Details saved" value={active.goldenWorkflow?.details?.savedAt ?? null} pending="Pending" />
+              <TimelineRow label="Compliance confirmed" value={active.goldenWorkflow?.compliance?.confirmedAt ?? null} pending="Pending" />
+              <TimelineRow label="Packaging released" value={active.goldenWorkflow?.packaging?.releasedAt ?? null} pending="Pending" />
+              <TimelineRow label="Golden sample" value={active.goldenWorkflow?.goldenSample?.receivedAt ?? null} pending={active.goldenWorkflow?.goldenSample?.status ?? "Not started"} />
+            </div>
+            <button onClick={() => setActiveId(null)} className="mt-6 w-full rounded-md border border-[#1a3a6e]/50 bg-[#060f26] py-2 text-sm text-[#90bce0] hover:bg-[#0a1e42]">Close</button>
           </div>
         )}
 
@@ -520,8 +330,8 @@ export default function DashboardPage() {
           <div>
             <h2 className="text-lg font-semibold text-[#ddeeff]">{active.codeName}</h2>
             <p className="mt-1 text-sm text-[#90bce0]">{active.skuCode}</p>
-            <div className="mt-6 rounded-xl border border-[#4a9aba]/30 bg-[#4a9aba]/10 px-5 py-4 text-center">
-              <p className="text-sm font-semibold text-[#4a9aba]">Awaiting team decision</p>
+            <div className="mt-6 rounded-md border border-[#4a9aba]/30 bg-[#4a9aba]/10 px-5 py-4 text-center">
+              <p className="text-sm font-medium text-[#4a9aba]">Awaiting team decision</p>
               <p className="mt-1 text-xs text-[#90bce0]">NPD report passed — CEO &amp; Dev team have been notified. No action taken yet.</p>
             </div>
             {active.npdReport && (
@@ -542,7 +352,7 @@ export default function DashboardPage() {
                 )}
               </div>
             )}
-            <button onClick={() => setActiveId(null)} className="mt-6 w-full rounded-xl border border-[#1a3a6e]/50 bg-[#060f26]/80 py-2 text-sm text-[#90bce0] hover:bg-[#0a1e42]">Close</button>
+            <button onClick={() => setActiveId(null)} className="mt-6 w-full rounded-md border border-[#1a3a6e]/50 bg-[#060f26] py-2 text-sm text-[#90bce0] hover:bg-[#0a1e42]">Close</button>
           </div>
         )}
 
@@ -574,7 +384,7 @@ export default function DashboardPage() {
 
             <button
               onClick={() => setActiveId(null)}
-              className="mt-6 w-full rounded-xl border border-[#1a3a6e]/50 bg-[#060f26]/80 py-2 text-sm text-[#90bce0] hover:bg-[#0a1e42]"
+              className="mt-6 w-full rounded-md border border-[#1a3a6e]/50 bg-[#060f26] py-2 text-sm text-[#90bce0] hover:bg-[#0a1e42]"
             >
               Close
             </button>
@@ -599,9 +409,9 @@ export default function DashboardPage() {
 
               {p.imageDataUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={p.imageDataUrl} alt={p.codeName} className="mt-4 h-48 w-full rounded-xl object-cover" />
+                <img src={p.imageDataUrl} alt={p.codeName} className="mt-4 h-48 w-full rounded-md object-cover" />
               ) : (
-                <div className="mt-4 flex h-32 items-center justify-center rounded-xl border border-dashed border-[#1a3a6e]/50 bg-[#0a1e42] text-sm text-[#5a8fc4]">
+                <div className="mt-4 flex h-32 items-center justify-center rounded-md border border-dashed border-[#1a3a6e]/50 bg-[#0a1e42] text-sm text-[#5a8fc4]">
                   No image uploaded
                 </div>
               )}
@@ -630,7 +440,7 @@ export default function DashboardPage() {
 
               <button
                 onClick={() => setViewId(null)}
-                className="mt-6 w-full rounded-xl border border-[#1a3a6e]/50 bg-[#060f26]/80 py-2 text-sm text-[#90bce0] hover:bg-[#0a1e42]"
+                className="mt-6 w-full rounded-md border border-[#1a3a6e]/50 bg-[#060f26] py-2 text-sm text-[#90bce0] hover:bg-[#0a1e42]"
               >
                 Close
               </button>

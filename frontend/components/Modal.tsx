@@ -27,7 +27,7 @@ export function Modal({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md rounded-2xl border border-[#1a3a6e]/50 bg-[#060f26] p-6 shadow-2xl"
+        className="w-full max-w-md rounded-lg border border-[#1a3a6e]/60 bg-[#060f26] p-6 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         {children}

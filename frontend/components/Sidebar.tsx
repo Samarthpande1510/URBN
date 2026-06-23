@@ -66,14 +66,14 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
 
   return (
     <>
-      <aside className="hidden h-screen w-60 shrink-0 flex-col justify-between bg-gradient-to-b from-[#050e24] to-[#071428] px-4 py-6 md:flex border-r border-[#1a3a6e]/40">
+      <aside className="hidden h-screen w-60 shrink-0 flex-col justify-between bg-[#010916]/90 px-4 py-6 md:flex border-r border-[#1a3a6e]/40">
         {navContent}
       </aside>
 
       {open && (
         <div className="fixed inset-0 z-[60] md:hidden">
           <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-          <aside className="absolute left-0 top-0 flex h-screen w-60 flex-col justify-between bg-gradient-to-b from-[#050e24] to-[#071428] px-4 py-6 shadow-xl border-r border-[#1a3a6e]/40">
+          <aside className="absolute left-0 top-0 flex h-screen w-60 flex-col justify-between bg-[#010916]/90 px-4 py-6 shadow-xl border-r border-[#1a3a6e]/40">
             {navContent}
           </aside>
         </div>

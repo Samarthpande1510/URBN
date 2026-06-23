@@ -274,12 +274,15 @@ interface ProductsContextValue {
   notifications: AppNotification[];
   addNotification: (n: Omit<AppNotification, "id" | "createdAt">) => void;
   dismissNotification: (id: string) => void;
+  search: string;
+  setSearch: (q: string) => void;
 }
 
 const ProductsContext = createContext<ProductsContextValue | null>(null);
 
 export function ProductsProvider({ children }: { children: ReactNode }) {
   const [products, setProducts] = useState<ProductRow[]>(initialProducts);
+  const [search, setSearch] = useState("");
   const [notifications, setNotifications] = useState<AppNotification[]>([
     { id: "seed-8", targetRoles: ["CEO", "Dev"], productId: 8, productName: "Lune Knit Dress", message: "NPD report passed — awaiting CEO decision.", createdAt: "2026-06-21T09:00:00" },
   ]);
@@ -319,7 +322,7 @@ export function ProductsProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <ProductsContext.Provider value={{ products, setProducts, addProduct, notifications, addNotification, dismissNotification }}>
+    <ProductsContext.Provider value={{ products, setProducts, addProduct, notifications, addNotification, dismissNotification, search, setSearch }}>
       {children}
     </ProductsContext.Provider>
   );

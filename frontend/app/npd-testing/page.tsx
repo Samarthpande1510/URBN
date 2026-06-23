@@ -9,6 +9,7 @@ import { STATUS_DOT, PRIORITY_DOT } from "@/lib/colors";
 import { getSession, Session } from "@/lib/auth";
 import { useToast } from "@/components/Toast";
 import { ChevronDown, ChevronUp } from "lucide-react";
+import { GridBeam } from "@/components/ui/grid-beam";
 
 type Filter = "All" | "Pending NPD" | "Pending Decision" | "Approved" | "On hold";
 const FILTERS: Filter[] = ["All", "Pending NPD", "Pending Decision", "Approved", "On hold"];
@@ -29,8 +30,19 @@ function Row({ label, value, pending }: { label: string; value: string | null; p
   );
 }
 
+function DeadlineBadge({ deadline }: { deadline: string }) {
+  const days = Math.ceil((new Date(deadline).getTime() - Date.now()) / 86400000);
+  if (days < 0)
+    return <span className="rounded bg-red-500/15 px-2 py-0.5 text-[11px] font-semibold text-red-400">{Math.abs(days)}d overdue</span>;
+  if (days <= 3)
+    return <span className="rounded bg-orange-500/15 px-2 py-0.5 text-[11px] font-semibold text-orange-400">{days}d left</span>;
+  if (days <= 7)
+    return <span className="rounded bg-yellow-500/10 px-2 py-0.5 text-[11px] font-semibold text-yellow-400">{days}d left</span>;
+  return null;
+}
+
 export default function NpdTestingPage() {
-  const { products, setProducts, addNotification } = useProducts();
+  const { products, setProducts, addNotification, search } = useProducts();
   const { showToast } = useToast();
   const [filter, setFilter] = useState<Filter>("All");
   const [session, setSession] = useState<Session | null>(null);
@@ -55,11 +67,13 @@ export default function NpdTestingPage() {
   const STATUS_ORDER: Record<string, number> = { "Pending NPD": 0, "Pending Decision": 1, "On hold": 2, Approved: 3 };
   const PRIORITY_ORDER: Record<string, number> = { Urgent: 0, High: 1, Medium: 2, Low: 3 };
 
+  const q = search.toLowerCase();
   const visible = products
     .filter((p) => {
       if (p.status === "Rejected") return false;
-      if (filter === "All") return true;
-      return p.status === filter;
+      if (filter !== "All" && p.status !== filter) return false;
+      if (q) return p.codeName.toLowerCase().includes(q) || (p.factory ?? "").toLowerCase().includes(q) || p.skuCode.toLowerCase().includes(q);
+      return true;
     })
     .sort((a, b) => {
       const statusDiff = (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9);
@@ -235,24 +249,27 @@ export default function NpdTestingPage() {
       <div className="mt-6 flex flex-wrap gap-2">
         {FILTERS.map((f) => (
           <button key={f} onClick={() => setFilter(f)}
-            className={`rounded-full border px-4 py-1.5 text-sm transition ${filter === f ? "border-[#2a6aaa] bg-[#1a4a8a] text-[#ddeeff]" : "border-[#1a3a6e]/50 bg-[#060f26]/80 text-[#90bce0] hover:bg-[#0a1e42]"}`}>
+            className={`rounded border px-4 py-1.5 text-sm transition ${filter === f ? "border-[#2a6aaa] bg-[#1a4a8a] text-[#ddeeff]" : "border-[#1a3a6e]/50 bg-[#060f26] text-[#90bce0] hover:bg-[#0a1e42]"}`}>
             {f} <span className="ml-1 opacity-60 tabular-nums">{counts[f]}</span>
           </button>
         ))}
       </div>
 
-      <div className="mt-6 space-y-3">
+      <GridBeam rows={5} cols={6} colorVariant="colorful" theme="dark" active className="mt-6 rounded-md border border-[#1a3a6e]/40 bg-[#060f26]/60 p-3 space-y-3">
         {visible.length === 0 && (
-          <div className="rounded-xl border border-[#1a3a6e]/40 bg-[#060f26]/80 px-5 py-10 text-center text-sm text-[#5a8fc4]">No products match this filter.</div>
+          <div className="rounded-md border border-[#1a3a6e]/40 bg-[#060f26] px-5 py-10 text-center text-sm text-[#5a8fc4]">No products match this filter.</div>
         )}
 
         {visible.map((p) => (
-          <div key={p.id} className="rounded-xl border border-[#1a3a6e]/40 bg-[#060f26]/80 overflow-hidden">
+          <div key={p.id} className="rounded-md border border-[#1a3a6e]/40 bg-[#060f26] overflow-hidden">
             {/* Header row */}
             <div className="flex flex-wrap items-center gap-3 px-5 py-4">
               <div className="flex-1 min-w-0">
                 <p className="font-semibold text-white">{p.codeName}</p>
-                <p className="text-xs text-[#90bce0] mt-0.5">{p.skuCode} · Deadline <span className="font-semibold text-[#f0c060] text-sm">{new Date(p.deadline).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span></p>
+                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                  <p className="text-xs text-[#90bce0]">{p.skuCode} · <span className="text-[#5a8fc4]">{new Date(p.deadline).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span></p>
+                  <DeadlineBadge deadline={p.deadline} />
+                </div>
               </div>
               <Chip color={PRIORITY_DOT[p.priority]} label={p.priority} />
 
@@ -278,24 +295,16 @@ export default function NpdTestingPage() {
 
             {/* Status banner */}
             {(p.status === "Pending Decision" || p.status === "Approved" || p.status === "On hold") && (
-              <div className={`border-t px-5 py-3 flex items-center gap-3 ${
-                p.status === "Approved" ? "border-green-500/20 bg-green-500/5" :
-                p.status === "On hold" ? "border-[#f0c060]/20 bg-[#f0c060]/5" :
-                "border-[#4a9aba]/20 bg-[#4a9aba]/5"
-              }`}>
-                <div className={`h-2.5 w-2.5 rounded-full shrink-0 ${
+              <div className="border-t border-[#1a3a6e]/30 px-5 py-3 flex items-center gap-3">
+                <div className={`h-2 w-2 rounded-full shrink-0 ${
                   p.status === "Approved" ? "bg-green-400" :
-                  p.status === "On hold" ? "bg-[#f0c060]" :
-                  "bg-[#4a9aba]"
+                  p.status === "On hold" ? "bg-amber-400" :
+                  "bg-sky-400"
                 }`} />
-                <p className={`font-semibold text-base ${
-                  p.status === "Approved" ? "text-green-400" :
-                  p.status === "On hold" ? "text-[#f0c060]" :
-                  "text-[#4a9aba]"
-                }`}>
+                <p className="font-medium text-sm text-white">
                   {p.status === "Approved" ? "Accepted" : p.status}
                 </p>
-                {p.statusChangedAt && <p className="text-xs text-[#5a8fc4] mt-0.5">since {fmt(p.statusChangedAt)}</p>}
+                {p.statusChangedAt && <p className="text-xs text-[#5a8fc4]">since {fmt(p.statusChangedAt)}</p>}
               </div>
             )}
 
@@ -303,16 +312,16 @@ export default function NpdTestingPage() {
             {p.status === "Pending Decision" && !isQA && (
               <div className="border-t border-[#1a3a6e]/30 px-5 py-3 flex items-center gap-2">
                 <span className="text-xs text-[#5a8fc4] mr-1">Decide:</span>
-                <button onClick={() => ceoDecide(p.id, p.codeName, "Approved")} className="rounded-lg border border-green-500/40 bg-green-500/10 px-4 py-1.5 text-sm font-semibold text-green-400 hover:bg-green-500/20">Approve</button>
-                <button onClick={() => ceoDecide(p.id, p.codeName, "On hold")} className="rounded-lg border border-[#f0c060]/30 bg-[#f0c060]/10 px-4 py-1.5 text-sm font-semibold text-[#f0c060] hover:bg-[#f0c060]/20">Hold</button>
-                <button onClick={() => ceoDecide(p.id, p.codeName, "Rejected")} className="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-1.5 text-sm font-semibold text-red-400 hover:bg-red-500/20">Reject</button>
+                <button onClick={() => ceoDecide(p.id, p.codeName, "Approved")} className="rounded-lg border border-green-500/40 bg-green-500/10 px-4 py-1.5 text-sm font-medium text-green-400 hover:bg-green-500/20">Approve</button>
+                <button onClick={() => ceoDecide(p.id, p.codeName, "On hold")} className="rounded-lg border border-[#f0c060]/30 bg-[#f0c060]/10 px-4 py-1.5 text-sm font-medium text-[#f0c060] hover:bg-[#f0c060]/20">Hold</button>
+                <button onClick={() => ceoDecide(p.id, p.codeName, "Rejected")} className="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-1.5 text-sm font-medium text-red-400 hover:bg-red-500/20">Reject</button>
               </div>
             )}
 
             {/* Activity log */}
             {expandedLog === p.id && p.activityLog.length > 0 && (
               <div className="border-t border-[#1a3a6e]/30 px-5 py-3 space-y-2">
-                <p className="text-xs font-semibold uppercase tracking-wide text-[#5a8fc4]">Timeline</p>
+                <p className="text-xs font-normal uppercase tracking-wide text-[#5a8fc4]">Timeline</p>
                 {[...p.activityLog].reverse().map((entry, i) => (
                   <div key={i} className="flex gap-3 text-xs">
                     <span className="text-[#f0c060] tabular-nums shrink-0">{fmt(entry.timestamp)}</span>
@@ -324,7 +333,7 @@ export default function NpdTestingPage() {
             )}
           </div>
         ))}
-      </div>
+      </GridBeam>
 
       {/* NPD Report modal */}
       <Modal open={!!reportProduct} onClose={() => setReportId(null)}>
@@ -335,7 +344,7 @@ export default function NpdTestingPage() {
 
             <div className="mt-5 space-y-5">
               <div>
-                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-[#90bce0]">Report file</label>
+                <label className="mb-1 block text-xs font-normal uppercase tracking-wide text-[#90bce0]">Report file</label>
                 <input ref={fileRef} type="file" accept=".pdf,.xlsx,.xls" className="hidden"
                   onChange={(e) => {
                     const f = e.target.files?.[0];
@@ -345,18 +354,18 @@ export default function NpdTestingPage() {
                     reader.readAsDataURL(f);
                   }} />
                 <button type="button" onClick={() => fileRef.current?.click()}
-                  className="flex w-full flex-col items-center justify-center rounded-xl border-2 border-dashed border-[#1a3a6e]/50 bg-[#0a1e42] py-8 text-sm text-[#90bce0] hover:bg-[#0d2550]">
+                  className="flex w-full flex-col items-center justify-center rounded-md border-2 border-dashed border-[#1a3a6e]/50 bg-[#0a1e42] py-8 text-sm text-[#90bce0] hover:bg-[#0d2550]">
                   <span className="text-2xl">↑</span>
                   <span className="mt-2">{reportFile?.name ?? "Click to upload — PDF or Excel"}</span>
                 </button>
               </div>
 
               <div>
-                <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-[#90bce0]">Test outcome *</label>
+                <label className="mb-2 block text-xs font-normal uppercase tracking-wide text-[#90bce0]">Test outcome *</label>
                 <div className="flex gap-3">
                   {(["Pass", "Not Pass"] as const).map((o) => (
                     <button key={o} type="button" onClick={() => setOutcome(o)}
-                      className={`flex-1 rounded-xl border py-2.5 text-sm font-semibold transition ${
+                      className={`flex-1 rounded-md border py-2.5 text-sm font-medium transition ${
                         outcome === o
                           ? o === "Pass" ? "border-green-500 bg-green-500/20 text-green-400" : "border-red-500 bg-red-500/20 text-red-400"
                           : "border-[#1a3a6e]/50 bg-[#0a1e42] text-[#90bce0] hover:bg-[#0d2550]"
@@ -370,17 +379,17 @@ export default function NpdTestingPage() {
               </div>
 
               <div>
-                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-[#90bce0]">QA notes</label>
+                <label className="mb-1 block text-xs font-normal uppercase tracking-wide text-[#90bce0]">QA notes</label>
                 <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3}
                   placeholder="Summary of key findings..."
-                  className="w-full rounded-xl border border-[#1a3a6e]/50 bg-[#0a1e42] px-3 py-2.5 text-sm text-[#ddeeff] outline-none focus:border-[#2a6aaa] placeholder:text-[#5a8fc4]" />
+                  className="w-full rounded-md border border-[#1a3a6e]/50 bg-[#0a1e42] px-3 py-2.5 text-sm text-[#ddeeff] outline-none focus:border-[#2a6aaa] placeholder:text-[#5a8fc4]" />
               </div>
             </div>
 
             <div className="mt-5 flex gap-3">
-              <button type="button" onClick={() => setReportId(null)} className="flex-1 rounded-xl border border-[#1a3a6e]/50 bg-[#060f26]/80 py-2.5 text-sm text-[#90bce0] hover:bg-[#0a1e42]">Cancel</button>
+              <button type="button" onClick={() => setReportId(null)} className="flex-1 rounded-md border border-[#1a3a6e]/50 bg-[#060f26] py-2.5 text-sm text-[#90bce0] hover:bg-[#0a1e42]">Cancel</button>
               <button type="submit" disabled={!outcome}
-                className="flex-1 rounded-xl bg-[#1a4a8a] py-2.5 text-sm font-semibold text-[#ddeeff] hover:opacity-90 disabled:opacity-40">
+                className="flex-1 rounded-md bg-[#1a4a8a] py-2.5 text-sm font-medium text-[#ddeeff] hover:opacity-90 disabled:opacity-40">
                 Submit Report
               </button>
             </div>
@@ -399,9 +408,9 @@ export default function NpdTestingPage() {
               <div className="mt-6">
                 <p className="text-sm text-[#90bce0]">No action taken yet. Choose one:</p>
                 <div className="mt-4 flex gap-3">
-                  <button onClick={() => decideFactory("EMAIL_FACTORY")} className="flex-1 rounded-xl bg-[#1a4a8a] py-2.5 text-sm font-medium text-[#ddeeff] hover:opacity-90">Email factory</button>
+                  <button onClick={() => decideFactory("EMAIL_FACTORY")} className="flex-1 rounded-md bg-[#1a4a8a] py-2.5 text-sm font-medium text-[#ddeeff] hover:opacity-90">Email factory</button>
                   {!isQA && (
-                    <button onClick={() => decideFactory("DROP")} className="flex-1 rounded-xl border border-[#1a3a6e]/50 bg-[#060f26]/80 py-2.5 text-sm font-medium text-red-400 hover:bg-[#0a1e42]">Drop product</button>
+                    <button onClick={() => decideFactory("DROP")} className="flex-1 rounded-md border border-[#1a3a6e]/50 bg-[#060f26] py-2.5 text-sm font-medium text-red-400 hover:bg-[#0a1e42]">Drop product</button>
                   )}
                 </div>
               </div>
@@ -420,32 +429,32 @@ export default function NpdTestingPage() {
 
                 <div className="pt-3 space-y-3">
                   <label className="block">
-                    <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-[#90bce0]">
+                    <span className="mb-1 block text-xs font-normal uppercase tracking-wide text-[#90bce0]">
                       Factory reply {holdProduct.factoryComm.replyAt && <span className="text-[#f0c060] normal-case font-normal">· last saved {fmt(holdProduct.factoryComm.replyAt)}</span>}
                     </span>
                     <textarea value={replyDraft} onChange={(e) => setReplyDraft(e.target.value)} rows={3}
                       placeholder="Paste factory reply here..."
-                      className="w-full rounded-xl border border-[#1a3a6e]/50 bg-[#0a1e42] px-3 py-2.5 text-sm text-[#ddeeff] outline-none focus:border-[#2a6aaa] placeholder:text-[#5a8fc4]" />
+                      className="w-full rounded-md border border-[#1a3a6e]/50 bg-[#0a1e42] px-3 py-2.5 text-sm text-[#ddeeff] outline-none focus:border-[#2a6aaa] placeholder:text-[#5a8fc4]" />
                   </label>
                   <label className="block">
-                    <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-[#90bce0]">Tentative return date</span>
+                    <span className="mb-1 block text-xs font-normal uppercase tracking-wide text-[#90bce0]">Tentative return date</span>
                     <input type="date" value={returnDateDraft} onChange={(e) => setReturnDateDraft(e.target.value)}
-                      className="w-full rounded-xl border border-[#1a3a6e]/50 bg-[#0a1e42] px-3 py-2.5 text-sm text-[#ddeeff] outline-none focus:border-[#2a6aaa]" />
+                      className="w-full rounded-md border border-[#1a3a6e]/50 bg-[#0a1e42] px-3 py-2.5 text-sm text-[#ddeeff] outline-none focus:border-[#2a6aaa]" />
                   </label>
                   <div className="flex gap-2">
-                    <button onClick={saveReply} className="flex-1 rounded-xl bg-[#1a4a8a] py-2.5 text-sm font-medium text-[#ddeeff] hover:opacity-90">
+                    <button onClick={saveReply} className="flex-1 rounded-md bg-[#1a4a8a] py-2.5 text-sm font-medium text-[#ddeeff] hover:opacity-90">
                       {holdProduct.factoryComm.replyAt ? "Update reply" : "Save reply"}
                     </button>
                     {!isQA && (
-                      <button onClick={rejectFromHold} className="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-2.5 text-sm font-semibold text-red-400 hover:bg-red-500/20">
+                      <button onClick={rejectFromHold} className="rounded-md border border-red-500/40 bg-red-500/10 px-4 py-2.5 text-sm font-medium text-red-400 hover:bg-red-500/20">
                         Reject
                       </button>
                     )}
                   </div>
 
                   {holdProduct.factoryComm.editHistory.length > 0 && (
-                    <div className="rounded-xl bg-[#0a1e42] px-4 py-3 space-y-1">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-[#5a8fc4]">Edit history</p>
+                    <div className="rounded-md bg-[#0a1e42] px-4 py-3 space-y-1">
+                      <p className="text-xs font-normal uppercase tracking-wide text-[#5a8fc4]">Edit history</p>
                       {holdProduct.factoryComm.editHistory.map((h, i) => (
                         <p key={i} className="text-xs text-[#90bce0]"><span className="text-[#f0c060]">{fmt(h.editedAt)}</span> — was: "{h.previousReply ?? "—"}" / {h.previousDate ?? "no date"}</p>
                       ))}
@@ -455,7 +464,7 @@ export default function NpdTestingPage() {
               </div>
             )}
 
-            <button onClick={() => setHoldId(null)} className="mt-4 w-full rounded-xl border border-[#1a3a6e]/50 bg-[#060f26]/80 py-2 text-sm text-[#90bce0] hover:bg-[#0a1e42]">Close</button>
+            <button onClick={() => setHoldId(null)} className="mt-4 w-full rounded-md border border-[#1a3a6e]/50 bg-[#060f26] py-2 text-sm text-[#90bce0] hover:bg-[#0a1e42]">Close</button>
           </div>
         )}
       </Modal>
@@ -463,16 +472,15 @@ export default function NpdTestingPage() {
       {/* Rejected / archived section */}
       {products.filter((p) => p.status === "Rejected").length > 0 && (
         <div className="mt-10">
-          <p className="text-sm font-semibold text-[#5a8fc4]">Rejected ({products.filter((p) => p.status === "Rejected").length})</p>
+          <p className="text-sm font-medium text-[#5a8fc4]">Rejected ({products.filter((p) => p.status === "Rejected").length})</p>
           <p className="mt-0.5 text-xs text-[#3a5a8a]">Archived products. Restore to put back into Pending NPD.</p>
           <div className="mt-3 space-y-2">
             {products.filter((p) => p.status === "Rejected").map((p) => (
-              <div key={p.id} className="flex items-center gap-3 rounded-xl border border-[#1a3a6e]/30 bg-[#060f26]/60 px-5 py-3 opacity-70">
+              <div key={p.id} className="flex items-center gap-3 rounded-md border border-[#1a3a6e]/30 bg-[#060f26] px-5 py-3 opacity-70">
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-[#90bce0]">{p.codeName}</p>
                   <p className="text-xs text-[#3a5a8a]">{p.skuCode} · Rejected {p.statusChangedAt ? new Date(p.statusChangedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : ""}</p>
                 </div>
-                <Chip color="#a14a3d" label="Rejected" />
                 {!isQA && (
                   <button onClick={() => restoreProduct(p.id, p.codeName)}
                     className="shrink-0 rounded-lg border border-[#2a6aaa]/40 px-3 py-1.5 text-xs font-medium text-[#90bce0] hover:bg-[#1a4a8a]/30 hover:text-[#ddeeff]">

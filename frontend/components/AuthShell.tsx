@@ -66,7 +66,7 @@ export function AuthShell({
         </div>
 
         <div className="w-full max-w-md">
-          <h1 className="text-3xl font-bold text-white">{title}</h1>
+          <h1 className="text-3xl font-semibold text-white">{title}</h1>
           <p className="mt-2 text-sm text-[#90bce0]">{subtitle}</p>
 
           <div className="mt-10">{children}</div>
