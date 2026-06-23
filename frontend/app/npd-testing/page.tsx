@@ -263,7 +263,7 @@ export default function NpdTestingPage() {
         {visible.map((p) => (
           <div key={p.id} className="rounded-md border border-[#1a3a6e]/40 bg-[#060f26] overflow-hidden">
             {/* Header row */}
-            <div className="flex flex-wrap items-center gap-3 px-5 py-4">
+            <div className="flex flex-wrap items-start gap-3 px-5 py-4">
               <div className="flex-1 min-w-0">
                 <p className="font-semibold text-white">{p.codeName}</p>
                 <div className="flex items-center gap-2 mt-0.5 flex-wrap">
@@ -273,7 +273,7 @@ export default function NpdTestingPage() {
               </div>
               <Chip color={PRIORITY_DOT[p.priority]} label={p.priority} />
 
-              <div className="flex flex-wrap gap-2">
+              <div className="flex w-full flex-wrap gap-2 sm:w-auto">
                 {/* NPD report button — all roles */}
                 <button onClick={() => openReport(p)}
                   className="rounded-lg border border-[#2a6aaa]/50 px-3 py-1.5 text-xs font-medium text-[#90bce0] hover:bg-[#1a4a8a]/40 hover:text-[#ddeeff]">
@@ -310,7 +310,7 @@ export default function NpdTestingPage() {
 
             {/* Decision panel — compact, non-QA only */}
             {p.status === "Pending Decision" && !isQA && (
-              <div className="border-t border-[#1a3a6e]/30 px-5 py-3 flex items-center gap-2">
+              <div className="border-t border-[#1a3a6e]/30 px-5 py-3 flex flex-wrap items-center gap-2">
                 <span className="text-xs text-[#5a8fc4] mr-1">Decide:</span>
                 <button onClick={() => ceoDecide(p.id, p.codeName, "Approved")} className="rounded-lg border border-green-500/40 bg-green-500/10 px-4 py-1.5 text-sm font-medium text-green-400 hover:bg-green-500/20">Approve</button>
                 <button onClick={() => ceoDecide(p.id, p.codeName, "On hold")} className="rounded-lg border border-[#f0c060]/30 bg-[#f0c060]/10 px-4 py-1.5 text-sm font-medium text-[#f0c060] hover:bg-[#f0c060]/20">Hold</button>

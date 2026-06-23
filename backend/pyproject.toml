@@ -1,0 +1,17 @@
+[project]
+name = "urbn-backend"
+version = "0.1.0"
+description = "URBN internal product pipeline tracker API"
+requires-python = ">=3.11"
+dependencies = [
+    "alembic>=1.13.0",
+    "bcrypt==4.0.1",
+    "fastapi>=0.115.0",
+    "passlib>=1.7.4",
+    "psycopg2-binary>=2.9.9",
+    "python-dotenv>=1.0.0",
+    "python-jose>=3.3.0",
+    "pydantic[email]>=2.0.0",
+    "sqlalchemy>=2.0.0",
+    "uvicorn[standard]>=0.29.0",
+]

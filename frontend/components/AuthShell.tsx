@@ -17,7 +17,6 @@ export function AuthShell({
 
       {/* ── Left panel — decorative ── */}
       <div className="relative hidden lg:flex lg:w-1/2 flex-col justify-between overflow-hidden p-12">
-        {/* Background image */}
         <div className="absolute inset-0">
           <div
             className="absolute inset-0"
@@ -27,52 +26,64 @@ export function AuthShell({
               backgroundPosition: "center",
             }}
           />
-          <div className="absolute inset-0 bg-[#020b1e]/30" />
+          <div className="absolute inset-0 bg-[#020b1e]/40" />
         </div>
 
         {/* Logo */}
         <div className="relative z-10 flex items-center gap-3">
-          <Image src="/logo.png" alt="URBN" width={40} height={40} className="rounded-xl" />
-          <span className="text-lg font-bold tracking-wide text-white">URBN</span>
+          <Image src="/logo.png" alt="URBN" width={36} height={36} className="rounded-lg" />
+          <span className="text-base font-semibold tracking-wide text-white">URBN</span>
         </div>
 
         {/* Bottom copy */}
         <div className="relative z-10">
-          <h2 className="text-2xl font-semibold text-white">URBN</h2>
-          <p className="mt-3 text-sm leading-relaxed text-white/70">
-            Simplify tracking.<br />
-            Every decision, logged and visible.
+          <h2 className="text-2xl font-semibold text-white">Product lifecycle made simple.</h2>
+          <p className="mt-3 text-sm leading-relaxed text-white/60">
+            Know where every product stands, who made each call, and what comes next. No chasing updates, no missed decisions, no confusion on the floor.
           </p>
 
-          {/* Progress demo strip */}
-          <div className="mt-10 flex gap-2">
-            {["Order", "Details", "Compliance", "Packaging", "Golden"].map((label, i) => (
-              <div key={label} className="flex-1">
-                <div className={`h-1 rounded-full ${i < 3 ? "bg-[#5b9eff]" : "bg-white/10"}`} />
-                <p className="mt-1.5 text-[10px] text-white/30 truncate">{label}</p>
-              </div>
-            ))}
-          </div>
         </div>
       </div>
 
       {/* ── Right panel — form ── */}
-      <div className="flex flex-1 flex-col items-center justify-center px-6 py-12 lg:px-20">
+      <div className="flex flex-1 flex-col items-center justify-center bg-[#0a0a0a] px-4 py-12 sm:px-8">
 
-        {/* Mobile logo */}
-        <div className="mb-10 flex items-center gap-3 lg:hidden">
-          <Image src="/logo.png" alt="URBN" width={36} height={36} className="rounded-xl" />
-          <span className="text-base font-bold text-white">URBN</span>
+        {/* Card */}
+        <div className="w-full max-w-[400px]">
+
+          {/* Logo — visible on mobile and inside card */}
+          <div className="mb-8 flex items-center gap-2.5 lg:hidden">
+            <Image src="/logo.png" alt="URBN" width={32} height={32} className="rounded-lg" />
+            <span className="text-sm font-semibold text-white">URBN</span>
+          </div>
+
+          <div className="rounded-lg border border-white/8 bg-[#141414] px-8 py-8 shadow-2xl shadow-black/60">
+
+            {/* Card header */}
+            <div className="mb-6">
+              <div className="hidden lg:flex mb-6 items-center gap-2">
+                <Image src="/logo.png" alt="URBN" width={28} height={28} className="rounded-md" />
+                <span className="text-sm font-semibold text-white">URBN</span>
+              </div>
+              <h1 className="text-xl font-semibold text-white">{title}</h1>
+              <p className="mt-1 text-sm text-[#6b6b6b]">{subtitle}</p>
+            </div>
+
+            <div className="border-t border-white/8 pt-6">
+              {children}
+            </div>
+
+          </div>
+
+          {/* Footer link outside card */}
+          <p className="mt-5 text-center text-sm text-[#4a4a4a]">{footer}</p>
+
+          {/* Fine print */}
+          <p className="mt-8 text-center text-[11px] text-[#333333]">
+            By continuing, you agree to URBN&apos;s internal use policy.
+          </p>
         </div>
 
-        <div className="w-full max-w-md">
-          <h1 className="text-3xl font-semibold text-white">{title}</h1>
-          <p className="mt-2 text-sm text-[#90bce0]">{subtitle}</p>
-
-          <div className="mt-10">{children}</div>
-
-          <p className="mt-8 text-sm text-[#5a8fc4]">{footer}</p>
-        </div>
       </div>
 
     </div>

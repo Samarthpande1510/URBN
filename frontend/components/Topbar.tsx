@@ -67,37 +67,38 @@ const emptyForm = {
 
   return (
     <>
-      <div className="flex items-center gap-3 border-b border-[#1a3a6e]/40 bg-[#010916]/85 backdrop-blur-sm px-4 py-3 sm:px-6">
+      <div className="flex items-center gap-2 border-b border-[#1a3a6e]/40 bg-[#010916]/85 backdrop-blur-sm px-4 py-3 sm:px-6">
         <button
           onClick={onMenuClick}
-          className="rounded p-2 text-[#90bce0] transition hover:bg-[#0d1f3c] hover:text-[#ddeeff] md:hidden"
+          className="shrink-0 rounded p-2 text-[#90bce0] transition hover:bg-[#0d1f3c] hover:text-[#ddeeff] md:hidden"
         >
           <Menu size={18} />
         </button>
 
         {/* Search */}
-        <div className="relative flex-1 max-w-sm">
+        <div className="relative min-w-0 flex-1 sm:max-w-sm">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#3a5a8a]" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search products or factories…"
+            placeholder="Search…"
             className="w-full rounded border border-[#1a3a6e]/50 bg-[#0d1f3c] py-2 pl-8 pr-3 text-sm text-[#ddeeff] placeholder-[#3a5a8a] outline-none focus:border-[#38bdf8]/50 focus:ring-0"
           />
         </div>
 
-        <div className="flex items-center gap-2 ml-auto">
+        <div className="flex shrink-0 items-center gap-2 ml-auto">
           {session && (
-            <p className="hidden text-sm text-[#5a8fc4] sm:block">
+            <p className="hidden text-sm text-[#5a8fc4] lg:block">
               Hi, <span className="text-[#ddeeff]">{session.name}</span>
             </p>
           )}
           <NotificationBell />
           <button
             onClick={() => setAddOpen(true)}
-            className="rounded bg-[#1a4a8a] px-4 py-2 text-sm font-medium text-[#ddeeff] transition hover:bg-[#1e57a8]"
+            className="shrink-0 rounded bg-[#1a4a8a] px-3 py-2 text-sm font-medium text-[#ddeeff] transition hover:bg-[#1e57a8] sm:px-4"
           >
-            + Add Product
+            <span className="hidden sm:inline">+ Add Product</span>
+            <span className="sm:hidden">+</span>
           </button>
         </div>
       </div>
@@ -124,7 +125,7 @@ const emptyForm = {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-xs font-normal uppercase tracking-wide text-[#90bce0]">
                 Factory *
@@ -151,7 +152,7 @@ const emptyForm = {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-xs font-normal uppercase tracking-wide text-[#90bce0]">
                 Priority *

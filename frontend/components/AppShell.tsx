@@ -59,11 +59,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   if (!ready) return null;
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex h-screen min-w-0 overflow-hidden">
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      <div className="flex flex-1 flex-col overflow-y-auto bg-[#020b1e]/60">
+      <div className="flex min-w-0 flex-1 flex-col overflow-y-auto bg-[#020b1e]/60">
         <Topbar onMenuClick={() => setSidebarOpen(true)} />
-        <main className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-8 flex-1">{children}</main>
+        <main className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 sm:py-8 flex-1 min-w-0">{children}</main>
       </div>
       <ActivityFeed />
     </div>

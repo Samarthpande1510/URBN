@@ -13,7 +13,7 @@ export function Field({
 }) {
   return (
     <label className="block">
-      <span className="mb-2 block text-xs font-semibold uppercase tracking-widest text-[#5a8fc4]">
+      <span className="mb-1.5 block text-sm font-medium text-[#aaaaaa]">
         {label}
       </span>
       <input
@@ -21,7 +21,7 @@ export function Field({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full rounded-xl border border-[#1a3a6e]/60 bg-[#060f26] px-4 py-3.5 text-sm text-[#ddeeff] placeholder-[#3a5a8a] outline-none transition focus:border-[#5b9eff]/60 focus:ring-1 focus:ring-[#5b9eff]/20"
+        className="w-full rounded-md border border-white/10 bg-[#1c1c1c] px-3.5 py-2.5 text-sm text-white placeholder-[#3d3d3d] outline-none transition focus:border-white/30 focus:ring-1 focus:ring-white/10"
       />
     </label>
   );

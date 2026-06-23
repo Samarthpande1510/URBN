@@ -106,6 +106,7 @@ export interface ProductRow {
   imageName?: string | null;
   imageDataUrl?: string | null;
   statusChangedAt?: string;
+  rejectedBy?: string;
   npdReport?: NpdReport;
   factoryComm?: FactoryComm;
   approvedWorkflow?: ApprovedWorkflow;
@@ -170,7 +171,7 @@ const initialProducts: ProductRow[] = [
   },
   {
     id: 3, codeName: "Drift Denim Jacket", skuCode: "FAC-2310", priority: "High",
-    status: "Rejected", deadline: "2026-06-30", statusChangedAt: "2026-06-05T14:30:00",
+    status: "Rejected", deadline: "2026-06-30", statusChangedAt: "2026-06-05T14:30:00", rejectedBy: "Arjun (CEO)",
     activityLog: [
       { action: "Product added", timestamp: "2026-06-01T10:00:00" },
       { action: "NPD report submitted — Not Pass", timestamp: "2026-06-05T14:30:00", note: "Structural failure in seam test." },
@@ -224,7 +225,7 @@ const initialProducts: ProductRow[] = [
   },
   {
     id: 7, codeName: "Ember Suede Boot", skuCode: "FAC-2334", priority: "High",
-    status: "Rejected", deadline: "2026-07-05", statusChangedAt: "2026-06-08T16:20:00",
+    status: "Rejected", deadline: "2026-07-05", statusChangedAt: "2026-06-08T16:20:00", rejectedBy: "Priya (Dev)",
     activityLog: [
       { action: "Product added", timestamp: "2026-06-02T11:00:00" },
       { action: "NPD report submitted — Not Pass", timestamp: "2026-06-08T16:20:00", note: "Sole adhesion failure." },

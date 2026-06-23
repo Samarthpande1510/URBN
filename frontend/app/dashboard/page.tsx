@@ -100,15 +100,16 @@ export default function DashboardPage() {
   return (
     <AppShell>
       <h1 className="text-2xl font-semibold text-white">Dashboard</h1>
-      <p className="mt-1 text-sm text-[#90bce0]">Summary of our products.</p>
+      <p className="mt-1 text-sm text-[#90bce0]">A live snapshot of every product in the pipeline. Click any row to see details.</p>
 
+      {/* KPI cards */}
       <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
         {(
           [
-            { label: "Total", value: products.length, color: "#ffffff" },
-            { label: "Pending NPD", value: counts["Pending NPD"], color: STATUS_DOT["Pending NPD"] },
-            { label: "Approved", value: counts["Approved"], color: STATUS_DOT["Approved"] },
-            { label: "On hold", value: counts["On hold"], color: STATUS_DOT["On hold"] },
+            { label: "Total products", hint: "All products ever added", value: products.length, color: "#ffffff" },
+            { label: "Pending NPD", hint: "Waiting for QA to test", value: counts["Pending NPD"], color: STATUS_DOT["Pending NPD"] },
+            { label: "Approved", hint: "Passed QA and CEO review", value: counts["Approved"], color: STATUS_DOT["Approved"] },
+            { label: "On hold", hint: "Waiting on factory response", value: counts["On hold"], color: STATUS_DOT["On hold"] },
           ] as const
         ).map((kpi) => (
           <div key={kpi.label} className="rounded-md border border-[#1a3a6e]/40 bg-[#060f26] px-5 py-4">
@@ -116,6 +117,7 @@ export default function DashboardPage() {
             <p className="mt-1 text-3xl font-semibold tabular-nums" style={{ color: kpi.color }}>
               {kpi.value}
             </p>
+            <p className="mt-1 text-[11px] text-[#3a5a8a]">{kpi.hint}</p>
           </div>
         ))}
       </div>
@@ -125,6 +127,7 @@ export default function DashboardPage() {
         {/* Status donut — rejection rate */}
         <div className="rounded-md border border-[#1a3a6e]/40 bg-[#060f26] p-5">
           <p className="text-xs font-normal uppercase tracking-wide text-[#5a8fc4]">Status breakdown</p>
+          <p className="mt-0.5 text-[11px] text-[#3a5a8a]">Where every product sits right now across all stages.</p>
           <div className="mt-3 flex items-center gap-5">
             <div className="relative h-36 w-36 shrink-0">
               <ResponsiveContainer width="100%" height="100%">
@@ -154,6 +157,7 @@ export default function DashboardPage() {
         {/* Priority breakdown bars */}
         <div className="rounded-md border border-[#1a3a6e]/40 bg-[#060f26] p-5">
           <p className="text-xs font-normal uppercase tracking-wide text-[#5a8fc4]">Priority split</p>
+          <p className="mt-0.5 text-[11px] text-[#3a5a8a]">How urgent the active products are. Urgent means action is needed today.</p>
           <div className="mt-4 space-y-3">
             {(["Urgent", "High", "Medium", "Low"] as const).map((pr) => {
               const count = activeProducts.filter((p) => p.priority === pr).length;
@@ -175,7 +179,12 @@ export default function DashboardPage() {
 
       </div>
 
-      <div className="mt-6 flex flex-wrap gap-2">
+      <div className="mt-8">
+        <h2 className="text-sm font-semibold text-[#ddeeff]">Active products</h2>
+        <p className="mt-0.5 text-xs text-[#3a5a8a]">Use the filters below to narrow down by stage. Click a row to see the full product detail.</p>
+      </div>
+
+      <div className="mt-3 flex flex-wrap gap-2">
         {ACTIVE_FILTERS.map((f) => (
           <button
             key={f}
@@ -192,23 +201,43 @@ export default function DashboardPage() {
       </div>
 
       <GridBeam rows={6} cols={8} colorVariant="ocean" theme="dark" active className="mt-6 overflow-hidden rounded-md border border-[#1a3a6e]/40 bg-[#060f26]/80">
-        <table className="w-full text-left text-sm">
+        <div className="overflow-x-auto">
+        <table className="min-w-[700px] w-full text-left text-sm">
           <thead>
             <tr className="border-b border-[#1a3a6e]/40 text-[#ddeeff]">
-              <th className="px-5 py-3 font-medium">Code name</th>
-              <th className="px-5 py-3 font-medium">Factory SKU code</th>
-              <th className="px-5 py-3 font-medium">Priority</th>
-              <th className="px-5 py-3 font-medium">Status</th>
-              <th className="px-5 py-3 font-medium">Assigned On</th>
-              <th className="px-5 py-3 text-right font-medium w-36 whitespace-nowrap">Deadline</th>
+              <th className="px-5 py-3 font-medium">
+                Code name
+                <p className="text-[10px] font-normal text-[#3a5a8a] mt-0.5">Internal product name</p>
+              </th>
+              <th className="px-5 py-3 font-medium">
+                Factory SKU code
+                <p className="text-[10px] font-normal text-[#3a5a8a] mt-0.5">Code given by the factory</p>
+              </th>
+              <th className="px-5 py-3 font-medium">
+                Priority
+                <p className="text-[10px] font-normal text-[#3a5a8a] mt-0.5">How urgent this is</p>
+              </th>
+              <th className="px-5 py-3 font-medium">
+                Status
+                <p className="text-[10px] font-normal text-[#3a5a8a] mt-0.5">Current pipeline stage</p>
+              </th>
+              <th className="px-5 py-3 font-medium">
+                Last updated
+                <p className="text-[10px] font-normal text-[#3a5a8a] mt-0.5">When status last changed</p>
+              </th>
+              <th className="px-5 py-3 text-right font-medium w-36 whitespace-nowrap">
+                Deadline
+                <p className="text-[10px] font-normal text-[#3a5a8a] mt-0.5">Target completion date</p>
+              </th>
               <th className="px-5 py-3" />
             </tr>
           </thead>
           <tbody>
             {visible.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-5 py-10 text-center text-sm text-[#5a8fc4]">
-                  No products match this filter.
+                <td colSpan={7} className="px-5 py-10 text-center">
+                  <p className="text-sm text-[#5a8fc4]">No products match this filter.</p>
+                  <p className="mt-1 text-xs text-[#3a5a8a]">Try selecting "All" above, or add a new product using the button in the top right.</p>
                 </td>
               </tr>
             ) : (
@@ -243,14 +272,16 @@ export default function DashboardPage() {
             )}
           </tbody>
         </table>
+        </div>
       </GridBeam>
 
       {archivedProducts.length > 0 && (
         <div className="mt-10">
-          <h2 className="text-base font-semibold text-[#90bce0]">Archived</h2>
-          <p className="mt-1 text-sm text-[#5a8fc4]">Rejected products — kept for record, out of the active pipeline.</p>
+          <h2 className="text-base font-semibold text-[#90bce0]">Archived products</h2>
+          <p className="mt-1 text-sm text-[#5a8fc4]">These products did not pass QA or were rejected. They are kept here for your records but are no longer in the active pipeline. You can restore them if needed.</p>
           <div className="mt-3 overflow-hidden rounded-md border border-[#1a3a6e]/40 bg-[#0a1e42]">
-            <table className="w-full text-left text-sm">
+            <div className="overflow-x-auto">
+            <table className="min-w-[560px] w-full text-left text-sm">
               <thead>
                 <tr className="border-b border-[#1a3a6e]/40 text-[#5a8fc4]">
                   <th className="px-5 py-3 font-medium">Code name</th>
@@ -265,22 +296,24 @@ export default function DashboardPage() {
                   <tr key={p.id} className="border-b border-[#1a3a6e]/30 last:border-0 opacity-70">
                     <td className="px-5 py-4 text-[#90bce0]">{p.codeName}</td>
                     <td className="px-5 py-4 text-[#5a8fc4]">{p.skuCode}</td>
-                    <td className="px-5 py-4">
-                      <Chip color={STATUS_DOT[p.status]} label={p.status} />
-                    </td>
+                    <td className="px-5 py-4 text-[#90bce0]">{p.rejectedBy ?? "—"}</td>
                     <td className="px-5 py-4 text-right tabular-nums text-[#5a8fc4]">
                       {p.statusChangedAt ? new Date(p.statusChangedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—"}
                     </td>
                     <td className="px-5 py-4 text-right">
-                      <button onClick={() => restoreProduct(p.id, p.codeName)}
-                        className="rounded-lg border border-[#2a6aaa]/40 px-3 py-1 text-xs font-medium text-[#90bce0] hover:bg-[#1a4a8a]/30 hover:text-[#ddeeff]">
-                        Restore
-                      </button>
+                      <div className="flex flex-col items-end gap-0.5">
+                        <button onClick={() => restoreProduct(p.id, p.codeName)}
+                          className="rounded-lg border border-[#2a6aaa]/40 px-3 py-1 text-xs font-medium text-[#90bce0] hover:bg-[#1a4a8a]/30 hover:text-[#ddeeff]">
+                          Restore
+                        </button>
+                        <span className="text-[10px] text-[#2a4a6a]">Sends back to Pending NPD</span>
+                      </div>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         </div>
       )}

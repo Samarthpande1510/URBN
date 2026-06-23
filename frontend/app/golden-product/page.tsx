@@ -320,7 +320,7 @@ function GoldenCard({ product, isQA }: { product: ProductRow; isQA: boolean }) {
           ) : (
             <div className="space-y-3 mt-3">
               {gw.details && <p className="text-xs text-[#f0c060]">Last saved {fmt(gw.details.savedAt)}</p>}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <Field label="Product name" value={detailDraft.productName} onChange={isQA ? undefined : (v) => setDetailDraft((d) => ({ ...d, productName: v }))} placeholder="e.g. Aria Knit Tee" disabled={isQA} />
                 <Field label="SKU code" value={detailDraft.skuCode} onChange={isQA ? undefined : (v) => setDetailDraft((d) => ({ ...d, skuCode: v }))} placeholder="e.g. URB-KT-001" disabled={isQA} />
                 <Field label="Colour" value={detailDraft.colour} onChange={isQA ? undefined : (v) => setDetailDraft((d) => ({ ...d, colour: v }))} placeholder="e.g. Slate Blue" disabled={isQA} />
@@ -504,7 +504,7 @@ function GoldenCard({ product, isQA }: { product: ProductRow; isQA: boolean }) {
                   <>
                     <div>
                       <span className="mb-1.5 block text-xs font-normal uppercase tracking-wide text-[#90bce0]">Status</span>
-                      <div className="grid grid-cols-4 gap-1.5">
+                      <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
                         {(["Not started", "Requested", "In progress", "Received"] as GoldenSampleStatus[]).map((s) => (
                           <button key={s} type="button" onClick={() => setGsDraft((d) => ({ ...d, status: s }))}
                             className={`rounded-lg border py-1.5 text-xs font-medium transition ${gsDraft.status === s ? "border-[#e8a020] bg-[#e8a020]/20 text-[#e8a020]" : "border-[#1a3a6e]/50 bg-[#0a1e42] text-[#5a8fc4] hover:bg-[#0d2550]"}`}>

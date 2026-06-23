@@ -30,7 +30,7 @@ export default function LoginPage() {
       footer={
         <>
           New here?{" "}
-          <Link href="/signup" className="text-[#5b9eff] hover:underline">
+          <Link href="/signup" className="font-medium text-white hover:underline">
             Create an account
           </Link>
         </>
@@ -40,12 +40,11 @@ export default function LoginPage() {
         <Field label="Work email" type="email" value={email} onChange={setEmail} placeholder="you@urbn.com" />
         <Field label="Password" type="password" value={password} onChange={setPassword} placeholder="••••••••" />
         {error && (
-          <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-sm text-red-400">{error}</p>
+          <p className="rounded-md border border-red-500/20 bg-red-500/8 px-3.5 py-2.5 text-sm text-red-400">{error}</p>
         )}
         <button
           type="submit"
-          className="mt-2 w-full rounded-xl py-3.5 text-sm font-semibold text-white transition hover:opacity-90 active:scale-[0.98]"
-          style={{ background: "linear-gradient(135deg, #5b9eff, #1d3a8a)" }}
+          className="mt-2 w-full rounded-md bg-white py-2.5 text-sm font-medium text-black transition hover:bg-[#e5e5e5] active:scale-[0.99]"
         >
           Log in
         </button>

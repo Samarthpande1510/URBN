@@ -36,7 +36,7 @@ export default function SignupPage() {
       footer={
         <>
           Already have an account?{" "}
-          <Link href="/login" className="text-[#5b9eff] hover:underline">
+          <Link href="/login" className="font-medium text-white hover:underline">
             Log in
           </Link>
         </>
@@ -47,18 +47,17 @@ export default function SignupPage() {
         <Field label="Work email" type="email" value={email} onChange={setEmail} placeholder="you@urbn.com" />
         <Field label="Password" type="password" value={password} onChange={setPassword} placeholder="••••••••" />
 
-        <p className="rounded-lg border border-[#1a3a6e]/40 bg-[#060f26] px-4 py-2.5 text-xs text-[#5a8fc4]">
+        <p className="rounded-md border border-white/8 bg-[#1c1c1c] px-3.5 py-2.5 text-xs text-[#555555]">
           Password must be at least 8 characters with a letter and a number.
         </p>
 
         {error && (
-          <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-sm text-red-400">{error}</p>
+          <p className="rounded-md border border-red-500/20 bg-[#1c1c1c] px-3.5 py-2.5 text-sm text-red-400">{error}</p>
         )}
 
         <button
           type="submit"
-          className="mt-2 w-full rounded-xl py-3.5 text-sm font-semibold text-white transition hover:opacity-90 active:scale-[0.98]"
-          style={{ background: "linear-gradient(135deg, #5b9eff, #1d3a8a)" }}
+          className="mt-2 w-full rounded-md bg-white py-2.5 text-sm font-medium text-black transition hover:bg-[#e5e5e5] active:scale-[0.99]"
         >
           Create account
         </button>
