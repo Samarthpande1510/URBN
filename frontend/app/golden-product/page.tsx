@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { ChevronDown, ChevronUp, CheckCircle, Circle } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { useProducts, ProductRow, GoldenWorkflow, GoldenSampleStatus, ActivityEntry } from "@/lib/products-context";
@@ -102,6 +102,9 @@ function GoldenCard({ product, isQA }: { product: ProductRow; isQA: boolean }) {
     sampleId: gw.packaging?.sampleIdReceived ?? "",
   });
 
+  const kldFileRef = useRef<HTMLInputElement>(null);
+  const artFileRef = useRef<HTMLInputElement>(null);
+
   const [gsDraft, setGsDraft] = useState({
     status: gw.goldenSample?.status ?? "Not started" as GoldenSampleStatus,
     expectedDate: gw.goldenSample?.expectedDate ?? "",
@@ -170,7 +173,7 @@ function GoldenCard({ product, isQA }: { product: ProductRow; isQA: boolean }) {
     showToast("Compliance confirmed");
   }
 
-  function setPackagingStep(field: "vendorSetAt" | "sampleReceivedAt" | "keyLineDrawingAt" | "artworkStartedAt" | "releasedAt", label: string) {
+  function setPackagingStep(field: "vendorSetAt" | "sampleReceivedAt" | "releasedAt", label: string) {
     const t = now();
     const entry: ActivityEntry = { action: label, timestamp: t };
     patch((w) => ({ ...w, packaging: w.packaging ? { ...w.packaging, [field]: t, log: [...w.packaging.log, entry] } : w.packaging }));
@@ -187,12 +190,48 @@ function GoldenCard({ product, isQA }: { product: ProductRow; isQA: boolean }) {
         vendorName: packDraft.vendorName, vendorSetAt: t,
         sampleIdReceived: packDraft.sampleId,
         sampleReceivedAt: packDraft.sampleId ? t : null,
-        keyLineDrawingAt: null, artworkStartedAt: null, releasedAt: null,
+        keyLineDrawingAt: null, keyLineDrawingImageUrl: null, keyLineDrawingApprovedAt: null, keyLineDrawingRejectedAt: null,
+        artworkStartedAt: null, artworkImageUrl: null, artworkApprovedAt: null, artworkRejectedAt: null,
+        releasedAt: null,
         log: [entry, ...(packDraft.sampleId ? [{ action: `Packaging sample received — ${packDraft.sampleId}`, timestamp: t }] : [])],
       },
     }));
     log(entry);
     showToast("Packaging started");
+  }
+
+  function uploadKeyLineDrawing(dataUrl: string, fileName: string) {
+    const t = now();
+    const entry: ActivityEntry = { action: `Key line drawing uploaded — ${fileName}`, timestamp: t };
+    patch((w) => ({ ...w, packaging: w.packaging ? { ...w.packaging, keyLineDrawingAt: t, keyLineDrawingImageUrl: dataUrl, keyLineDrawingApprovedAt: null, keyLineDrawingRejectedAt: null, log: [...w.packaging.log, entry] } : w.packaging }));
+    log(entry);
+    showToast("Key line drawing uploaded");
+  }
+
+  function decideKeyLineDrawing(approved: boolean) {
+    const t = now();
+    const action = approved ? "Key line drawing approved" : "Key line drawing rejected";
+    const entry: ActivityEntry = { action, timestamp: t };
+    patch((w) => ({ ...w, packaging: w.packaging ? { ...w.packaging, keyLineDrawingApprovedAt: approved ? t : null, keyLineDrawingRejectedAt: approved ? null : t, log: [...w.packaging.log, entry] } : w.packaging }));
+    log(entry);
+    showToast(action);
+  }
+
+  function uploadArtwork(dataUrl: string, fileName: string) {
+    const t = now();
+    const entry: ActivityEntry = { action: `Artwork uploaded — ${fileName}`, timestamp: t };
+    patch((w) => ({ ...w, packaging: w.packaging ? { ...w.packaging, artworkStartedAt: t, artworkImageUrl: dataUrl, artworkApprovedAt: null, artworkRejectedAt: null, log: [...w.packaging.log, entry] } : w.packaging }));
+    log(entry);
+    showToast("Artwork uploaded");
+  }
+
+  function decideArtwork(approved: boolean) {
+    const t = now();
+    const action = approved ? "Artwork approved" : "Artwork rejected";
+    const entry: ActivityEntry = { action, timestamp: t };
+    patch((w) => ({ ...w, packaging: w.packaging ? { ...w.packaging, artworkApprovedAt: approved ? t : null, artworkRejectedAt: approved ? null : t, log: [...w.packaging.log, entry] } : w.packaging }));
+    log(entry);
+    showToast(action);
   }
 
   function saveGoldenSample() {
@@ -332,16 +371,113 @@ function GoldenCard({ product, isQA }: { product: ProductRow; isQA: boolean }) {
                     </div>
                   ) : <p className="text-xs text-[#3a5a8a]">Not started yet.</p>
                 ) : (
-                  <div className="space-y-1.5">
+                  <div className="space-y-3">
+                    {/* Vendor + Sample */}
                     <Step done={!!gw.packaging.vendorSetAt} label={`Vendor: ${gw.packaging.vendorName}`} timestamp={gw.packaging.vendorSetAt} />
-                    <Step done={!!gw.packaging.sampleReceivedAt} label={`Sample received${gw.packaging.sampleIdReceived ? ` — ${gw.packaging.sampleIdReceived}` : ""}`} timestamp={gw.packaging.sampleReceivedAt} />
-                    {!isQA && !gw.packaging.sampleReceivedAt && <button onClick={() => setPackagingStep("sampleReceivedAt", `Packaging sample received — ${gw.packaging!.sampleIdReceived}`)} className="ml-6 rounded-lg bg-[#1a3a6e]/60 px-3 py-1 text-xs text-[#ddeeff] hover:bg-[#1a4a8a]">Mark received</button>}
-                    <Step done={!!gw.packaging.keyLineDrawingAt} label="Key line drawing done" timestamp={gw.packaging.keyLineDrawingAt} />
-                    {!isQA && gw.packaging.sampleReceivedAt && !gw.packaging.keyLineDrawingAt && <button onClick={() => setPackagingStep("keyLineDrawingAt", "Key line drawing completed")} className="ml-6 rounded-lg bg-[#1a3a6e]/60 px-3 py-1 text-xs text-[#ddeeff] hover:bg-[#1a4a8a]">Mark done</button>}
-                    <Step done={!!gw.packaging.artworkStartedAt} label="Artwork started" timestamp={gw.packaging.artworkStartedAt} />
-                    {!isQA && gw.packaging.keyLineDrawingAt && !gw.packaging.artworkStartedAt && <button onClick={() => setPackagingStep("artworkStartedAt", "Artwork started")} className="ml-6 rounded-lg bg-[#1a3a6e]/60 px-3 py-1 text-xs text-[#ddeeff] hover:bg-[#1a4a8a]">Mark started</button>}
-                    <Step done={!!gw.packaging.releasedAt} label="Released (packaging + user manual)" timestamp={gw.packaging.releasedAt} />
-                    {!isQA && gw.packaging.artworkStartedAt && !gw.packaging.releasedAt && <button onClick={() => setPackagingStep("releasedAt", "Packaging and user manual released")} className="ml-6 rounded-lg border border-green-500/40 bg-green-500/10 px-3 py-1 text-xs font-semibold text-green-400 hover:bg-green-500/20">Mark released</button>}
+                    <div>
+                      <Step done={!!gw.packaging.sampleReceivedAt} label={`Sample${gw.packaging.sampleIdReceived ? ` — ${gw.packaging.sampleIdReceived}` : ""} received`} timestamp={gw.packaging.sampleReceivedAt} />
+                      {!isQA && !gw.packaging.sampleReceivedAt && (
+                        <button onClick={() => setPackagingStep("sampleReceivedAt", `Packaging sample received — ${gw.packaging!.sampleIdReceived}`)} className="ml-6 mt-1 rounded-lg bg-[#1a3a6e]/60 px-3 py-1 text-xs text-[#ddeeff] hover:bg-[#1a4a8a]">Mark received</button>
+                      )}
+                    </div>
+
+                    {/* Key Line Drawing */}
+                    {gw.packaging.sampleReceivedAt && (
+                      <div className="rounded-lg border border-[#1a3a6e]/40 bg-[#020b1e]/40 p-3 space-y-2">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-[#90bce0]">Key Line Drawing</p>
+
+                        {gw.packaging.keyLineDrawingImageUrl ? (
+                          <>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={gw.packaging.keyLineDrawingImageUrl} alt="Key line drawing" className="w-full rounded-lg object-contain max-h-48 bg-[#0a1e42]" />
+                            <p className="text-[10px] text-[#5a8fc4]">Uploaded {fmt(gw.packaging.keyLineDrawingAt)}</p>
+                            {!gw.packaging.keyLineDrawingApprovedAt && !gw.packaging.keyLineDrawingRejectedAt && !isQA && (
+                              <div className="flex gap-2">
+                                <button onClick={() => decideKeyLineDrawing(true)} className="flex-1 rounded-lg border border-green-500/40 bg-green-500/10 py-1.5 text-xs font-semibold text-green-400 hover:bg-green-500/20">Approve</button>
+                                <button onClick={() => decideKeyLineDrawing(false)} className="flex-1 rounded-lg border border-red-500/40 bg-red-500/10 py-1.5 text-xs font-semibold text-red-400 hover:bg-red-500/20">Reject</button>
+                              </div>
+                            )}
+                            {gw.packaging.keyLineDrawingApprovedAt && <p className="flex items-center gap-1 text-xs text-green-400"><CheckCircle size={11} /> Approved {fmt(gw.packaging.keyLineDrawingApprovedAt)}</p>}
+                            {gw.packaging.keyLineDrawingRejectedAt && (
+                              <div className="space-y-1.5">
+                                <p className="text-xs text-red-400">✕ Rejected {fmt(gw.packaging.keyLineDrawingRejectedAt)} — re-upload to try again</p>
+                                {!isQA && (
+                                  <button onClick={() => kldFileRef.current?.click()} className="w-full rounded-lg border border-dashed border-[#1a3a6e]/50 py-1.5 text-xs text-[#90bce0] hover:bg-[#0a1e42]">Re-upload</button>
+                                )}
+                              </div>
+                            )}
+                          </>
+                        ) : !isQA ? (
+                          <button onClick={() => kldFileRef.current?.click()} className="flex w-full flex-col items-center justify-center rounded-lg border-2 border-dashed border-[#1a3a6e]/50 py-4 text-xs text-[#5a8fc4] hover:bg-[#0a1e42]">
+                            <span className="text-lg">↑</span> Upload image
+                          </button>
+                        ) : (
+                          <p className="text-xs text-[#3a5a8a]">No image uploaded yet.</p>
+                        )}
+                        <input ref={kldFileRef} type="file" accept="image/*" className="hidden"
+                          onChange={(e) => {
+                            const f = e.target.files?.[0]; if (!f) return;
+                            const reader = new FileReader();
+                            reader.onload = (ev) => uploadKeyLineDrawing(ev.target?.result as string, f.name);
+                            reader.readAsDataURL(f);
+                            e.target.value = "";
+                          }} />
+                      </div>
+                    )}
+
+                    {/* Artwork */}
+                    {gw.packaging.keyLineDrawingApprovedAt && (
+                      <div className="rounded-lg border border-[#1a3a6e]/40 bg-[#020b1e]/40 p-3 space-y-2">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-[#90bce0]">Artwork</p>
+
+                        {gw.packaging.artworkImageUrl ? (
+                          <>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={gw.packaging.artworkImageUrl} alt="Artwork" className="w-full rounded-lg object-contain max-h-48 bg-[#0a1e42]" />
+                            <p className="text-[10px] text-[#5a8fc4]">Uploaded {fmt(gw.packaging.artworkStartedAt)}</p>
+                            {!gw.packaging.artworkApprovedAt && !gw.packaging.artworkRejectedAt && !isQA && (
+                              <div className="flex gap-2">
+                                <button onClick={() => decideArtwork(true)} className="flex-1 rounded-lg border border-green-500/40 bg-green-500/10 py-1.5 text-xs font-semibold text-green-400 hover:bg-green-500/20">Approve</button>
+                                <button onClick={() => decideArtwork(false)} className="flex-1 rounded-lg border border-red-500/40 bg-red-500/10 py-1.5 text-xs font-semibold text-red-400 hover:bg-red-500/20">Reject</button>
+                              </div>
+                            )}
+                            {gw.packaging.artworkApprovedAt && <p className="flex items-center gap-1 text-xs text-green-400"><CheckCircle size={11} /> Approved {fmt(gw.packaging.artworkApprovedAt)}</p>}
+                            {gw.packaging.artworkRejectedAt && (
+                              <div className="space-y-1.5">
+                                <p className="text-xs text-red-400">✕ Rejected {fmt(gw.packaging.artworkRejectedAt)} — re-upload to try again</p>
+                                {!isQA && (
+                                  <button onClick={() => artFileRef.current?.click()} className="w-full rounded-lg border border-dashed border-[#1a3a6e]/50 py-1.5 text-xs text-[#90bce0] hover:bg-[#0a1e42]">Re-upload</button>
+                                )}
+                              </div>
+                            )}
+                          </>
+                        ) : !isQA ? (
+                          <button onClick={() => artFileRef.current?.click()} className="flex w-full flex-col items-center justify-center rounded-lg border-2 border-dashed border-[#1a3a6e]/50 py-4 text-xs text-[#5a8fc4] hover:bg-[#0a1e42]">
+                            <span className="text-lg">↑</span> Upload artwork
+                          </button>
+                        ) : (
+                          <p className="text-xs text-[#3a5a8a]">No artwork uploaded yet.</p>
+                        )}
+                        <input ref={artFileRef} type="file" accept="image/*" className="hidden"
+                          onChange={(e) => {
+                            const f = e.target.files?.[0]; if (!f) return;
+                            const reader = new FileReader();
+                            reader.onload = (ev) => uploadArtwork(ev.target?.result as string, f.name);
+                            reader.readAsDataURL(f);
+                            e.target.value = "";
+                          }} />
+                      </div>
+                    )}
+
+                    {/* Release */}
+                    {gw.packaging.artworkApprovedAt && (
+                      <div>
+                        <Step done={!!gw.packaging.releasedAt} label="Released (packaging + user manual)" timestamp={gw.packaging.releasedAt} />
+                        {!isQA && !gw.packaging.releasedAt && (
+                          <button onClick={() => setPackagingStep("releasedAt", "Packaging and user manual released")} className="ml-6 mt-1 rounded-lg border border-green-500/40 bg-green-500/10 px-3 py-1 text-xs font-semibold text-green-400 hover:bg-green-500/20">Mark released</button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
                 {gw.packaging && <LogPanel entries={gw.packaging.log} />}

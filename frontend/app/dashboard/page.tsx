@@ -61,7 +61,7 @@ function FormField({
 }
 
 export default function DashboardPage() {
-  const { products, setProducts } = useProducts();
+  const { products, setProducts, addNotification } = useProducts();
   const { showToast } = useToast();
   const [filter, setFilter] = useState<ActiveFilter>("All");
   const [activeId, setActiveId] = useState<number | null>(null);
@@ -131,7 +131,25 @@ export default function DashboardPage() {
         };
       })
     );
-    showToast(action === "EMAIL_FACTORY" ? "Factory emailed" : "Product dropped");
+    if (active) {
+      if (action === "DROP") {
+        addNotification({ targetRoles: ["CEO"], productId: active.id, productName: active.codeName, message: "Product has been dropped and rejected." });
+      } else {
+        addNotification({ targetRoles: ["Dev"], productId: active.id, productName: active.codeName, message: "Factory has been emailed — acknowledge when ready." });
+      }
+    }
+    showToast(action === "EMAIL_FACTORY" ? "Factory emailed — Dev notified" : "Product dropped — CEO notified");
+  }
+
+  function restoreProduct(productId: number, productName: string) {
+    const now = new Date().toISOString();
+    setProducts((prev) => prev.map((p) => p.id === productId ? {
+      ...p, status: "Pending NPD" as Status, statusChangedAt: now,
+      factoryComm: undefined,
+      activityLog: [...p.activityLog, { action: "Restored to Pending NPD", timestamp: now }],
+    } : p));
+    addNotification({ targetRoles: ["CEO", "Dev"], productId, productName, message: "Product has been restored to Pending NPD." });
+    showToast("Product restored to Pending NPD");
   }
 
   function notifyPurchase() {
@@ -326,11 +344,12 @@ export default function DashboardPage() {
                   <th className="px-5 py-3 font-medium">Priority</th>
                   <th className="px-5 py-3 font-medium">Status</th>
                   <th className="px-5 py-3 text-right font-medium">Rejected on</th>
+                  <th className="px-5 py-3 font-medium"></th>
                 </tr>
               </thead>
               <tbody>
                 {archivedProducts.map((p) => (
-                  <tr key={p.id} className="border-b border-[#e9e1cf] last:border-0">
+                  <tr key={p.id} className="border-b border-[#1a3a6e]/30 last:border-0 opacity-70">
                     <td className="px-5 py-4 text-[#90bce0]">{p.codeName}</td>
                     <td className="px-5 py-4 text-[#5a8fc4]">{p.skuCode}</td>
                     <td className="px-5 py-4">
@@ -341,6 +360,12 @@ export default function DashboardPage() {
                     </td>
                     <td className="px-5 py-4 text-right tabular-nums text-[#5a8fc4]">
                       {p.statusChangedAt ? new Date(p.statusChangedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—"}
+                    </td>
+                    <td className="px-5 py-4 text-right">
+                      <button onClick={() => restoreProduct(p.id, p.codeName)}
+                        className="rounded-lg border border-[#2a6aaa]/40 px-3 py-1 text-xs font-medium text-[#90bce0] hover:bg-[#1a4a8a]/30 hover:text-[#ddeeff]">
+                        Restore
+                      </button>
                     </td>
                   </tr>
                 ))}

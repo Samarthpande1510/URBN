@@ -9,6 +9,7 @@ export const STATUS_DOT: Record<Status, string> = {
 };
 
 export const PRIORITY_DOT: Record<Priority, string> = {
+  Urgent: "#ff2d55",
   High: "#e05050",
   Medium: "#e8a020",
   Low: "#60a8d0",

@@ -1,18 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Bell } from "lucide-react";
 import { useProducts } from "@/lib/products-context";
 import { getSession } from "@/lib/auth";
+import type { Role } from "@/lib/auth";
 
 export function NotificationBell() {
   const { notifications, dismissNotification } = useProducts();
   const [open, setOpen] = useState(false);
-  const [role, setRole] = useState<string | null>(null);
 
-  useEffect(() => { setRole(getSession()?.role ?? null); }, []);
+  // Read role directly on every render — getSession() is just a localStorage read,
+  // safe in "use client" components (always runs in the browser after hydration).
+  const role: Role | null = (typeof window !== "undefined" ? getSession()?.role : null) ?? null;
 
-  const mine = notifications.filter((n) => role && n.targetRoles.includes(role as never));
+  const mine = role ? notifications.filter((n) => n.targetRoles.includes(role)) : [];
 
   return (
     <div className="relative">
@@ -34,7 +36,7 @@ export function NotificationBell() {
               Notifications {role && <span className="ml-2 text-xs font-normal text-[#5a8fc4]">({role})</span>}
             </div>
             {mine.length === 0 ? (
-              <p className="px-4 py-6 text-center text-sm text-[#3a6a9a]">You're all caught up.</p>
+              <p className="px-4 py-6 text-center text-sm text-[#3a6a9a]">You&apos;re all caught up.</p>
             ) : (
               <div className="max-h-80 overflow-y-auto">
                 {mine.map((n) => (

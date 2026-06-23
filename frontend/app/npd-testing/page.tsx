@@ -53,7 +53,7 @@ export default function NpdTestingPage() {
   const isQA = session?.role === "QA";
 
   const STATUS_ORDER: Record<string, number> = { "Pending NPD": 0, "Pending Decision": 1, "On hold": 2, Approved: 3 };
-  const PRIORITY_ORDER: Record<string, number> = { High: 0, Medium: 1, Low: 2 };
+  const PRIORITY_ORDER: Record<string, number> = { Urgent: 0, High: 1, Medium: 2, Low: 3 };
 
   const visible = products
     .filter((p) => {
@@ -118,7 +118,7 @@ export default function NpdTestingPage() {
     setReportId(null);
   }
 
-  function ceoDecide(productId: number, decision: "Approved" | "On hold" | "Rejected") {
+  function ceoDecide(productId: number, productName: string, decision: "Approved" | "On hold" | "Rejected") {
     const now = new Date().toISOString();
     setProducts((prev) => prev.map((p) => {
       if (p.id !== productId) return p;
@@ -131,6 +131,9 @@ export default function NpdTestingPage() {
       }
       return base;
     }));
+    if (decision === "Rejected") {
+      addNotification({ targetRoles: ["CEO", "Dev", "Purchase"], productId, productName, message: `Product rejected by CEO.` });
+    }
     showToast(`Product ${decision.toLowerCase()}`);
   }
 
@@ -155,8 +158,37 @@ export default function NpdTestingPage() {
         activityLog: [...p.activityLog, { action: "Factory emailed", timestamp: now }],
       };
     }));
-    addNotification({ targetRoles: ["Dev"], productId: holdProduct.id, productName: holdProduct.codeName, message: "Factory has been emailed — acknowledge when ready." });
-    showToast(action === "EMAIL_FACTORY" ? "Factory emailed — Dev team notified" : "Product dropped");
+    if (action === "EMAIL_FACTORY") {
+      addNotification({ targetRoles: ["Dev"], productId: holdProduct.id, productName: holdProduct.codeName, message: "Factory has been emailed — acknowledge when ready." });
+      showToast("Factory emailed — Dev team notified");
+    } else {
+      addNotification({ targetRoles: ["CEO"], productId: holdProduct.id, productName: holdProduct.codeName, message: "Product has been dropped and rejected." });
+      showToast("Product dropped — CEO notified");
+      setHoldId(null);
+    }
+  }
+
+  function rejectFromHold() {
+    if (!holdProduct) return;
+    const now = new Date().toISOString();
+    setProducts((prev) => prev.map((p) => p.id === holdProduct.id ? {
+      ...p, status: "Rejected" as Status, statusChangedAt: now,
+      activityLog: [...p.activityLog, { action: "Rejected after hold — factory response unsatisfactory", timestamp: now }],
+    } : p));
+    addNotification({ targetRoles: ["CEO"], productId: holdProduct.id, productName: holdProduct.codeName, message: "Product rejected after hold — factory response was unsatisfactory." });
+    showToast("Product rejected — CEO notified");
+    setHoldId(null);
+  }
+
+  function restoreProduct(productId: number, productName: string) {
+    const now = new Date().toISOString();
+    setProducts((prev) => prev.map((p) => p.id === productId ? {
+      ...p, status: "Pending NPD" as Status, statusChangedAt: now,
+      factoryComm: undefined,
+      activityLog: [...p.activityLog, { action: "Restored to Pending NPD", timestamp: now }],
+    } : p));
+    addNotification({ targetRoles: ["CEO", "Dev"], productId, productName, message: "Product has been restored to Pending NPD." });
+    showToast("Product restored to Pending NPD");
   }
 
   function acknowledge() {
@@ -223,7 +255,6 @@ export default function NpdTestingPage() {
                 <p className="text-xs text-[#90bce0] mt-0.5">{p.skuCode} · Deadline <span className="font-semibold text-[#f0c060] text-sm">{new Date(p.deadline).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span></p>
               </div>
               <Chip color={PRIORITY_DOT[p.priority]} label={p.priority} />
-              <Chip color={STATUS_DOT[p.status]} label={p.status} />
 
               <div className="flex flex-wrap gap-2">
                 {/* NPD report button — all roles */}
@@ -232,16 +263,7 @@ export default function NpdTestingPage() {
                   {p.npdReport ? (p.status === "Pending NPD" ? "Re-upload Report" : "View Report") : "Upload Report"}
                 </button>
 
-                {/* CEO decision for Pending Decision */}
-                {p.status === "Pending Decision" && !isQA && (
-                  <>
-                    <button onClick={() => ceoDecide(p.id, "Approved")} className="rounded-lg border border-green-500/40 bg-green-500/10 px-3 py-1.5 text-xs font-semibold text-green-400 hover:bg-green-500/20">Approve</button>
-                    <button onClick={() => ceoDecide(p.id, "On hold")} className="rounded-lg border border-[#f0c060]/30 bg-[#f0c060]/10 px-3 py-1.5 text-xs font-semibold text-[#f0c060] hover:bg-[#f0c060]/20">Hold</button>
-                    <button onClick={() => ceoDecide(p.id, "Rejected")} className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-400 hover:bg-red-500/20">Reject</button>
-                  </>
-                )}
-
-                {/* Manage hold — all roles, but QA can only email/edit factory, not drop */}
+                {/* Manage hold */}
                 {p.status === "On hold" && (
                   <button onClick={() => openHold(p)} className="rounded-lg border border-[#f0c060]/30 px-3 py-1.5 text-xs font-medium text-[#f0c060] hover:bg-[#f0c060]/10">Manage Hold</button>
                 )}
@@ -254,13 +276,36 @@ export default function NpdTestingPage() {
               </div>
             </div>
 
-            {/* NPD result strip */}
-            {p.npdReport && (
-              <div className={`border-t border-[#1a3a6e]/30 px-5 py-2 flex items-center gap-2 text-xs ${p.npdReport.outcome === "Pass" ? "text-green-400" : "text-red-400"}`}>
-                <span className="font-semibold">{p.npdReport.outcome}</span>
-                <span className="text-[#5a8fc4]">·</span>
-                <span className="text-[#90bce0]">{fmt(p.npdReport.submittedAt)}</span>
-                {p.npdReport.notes && <><span className="text-[#5a8fc4]">·</span><span className="text-[#90bce0]">{p.npdReport.notes}</span></>}
+            {/* Status banner */}
+            {(p.status === "Pending Decision" || p.status === "Approved" || p.status === "On hold") && (
+              <div className={`border-t px-5 py-3 flex items-center gap-3 ${
+                p.status === "Approved" ? "border-green-500/20 bg-green-500/5" :
+                p.status === "On hold" ? "border-[#f0c060]/20 bg-[#f0c060]/5" :
+                "border-[#4a9aba]/20 bg-[#4a9aba]/5"
+              }`}>
+                <div className={`h-2.5 w-2.5 rounded-full shrink-0 ${
+                  p.status === "Approved" ? "bg-green-400" :
+                  p.status === "On hold" ? "bg-[#f0c060]" :
+                  "bg-[#4a9aba]"
+                }`} />
+                <p className={`font-semibold text-base ${
+                  p.status === "Approved" ? "text-green-400" :
+                  p.status === "On hold" ? "text-[#f0c060]" :
+                  "text-[#4a9aba]"
+                }`}>
+                  {p.status === "Approved" ? "Accepted" : p.status}
+                </p>
+                {p.statusChangedAt && <p className="text-xs text-[#5a8fc4] mt-0.5">since {fmt(p.statusChangedAt)}</p>}
+              </div>
+            )}
+
+            {/* Decision panel — compact, non-QA only */}
+            {p.status === "Pending Decision" && !isQA && (
+              <div className="border-t border-[#1a3a6e]/30 px-5 py-3 flex items-center gap-2">
+                <span className="text-xs text-[#5a8fc4] mr-1">Decide:</span>
+                <button onClick={() => ceoDecide(p.id, p.codeName, "Approved")} className="rounded-lg border border-green-500/40 bg-green-500/10 px-4 py-1.5 text-sm font-semibold text-green-400 hover:bg-green-500/20">Approve</button>
+                <button onClick={() => ceoDecide(p.id, p.codeName, "On hold")} className="rounded-lg border border-[#f0c060]/30 bg-[#f0c060]/10 px-4 py-1.5 text-sm font-semibold text-[#f0c060] hover:bg-[#f0c060]/20">Hold</button>
+                <button onClick={() => ceoDecide(p.id, p.codeName, "Rejected")} className="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-1.5 text-sm font-semibold text-red-400 hover:bg-red-500/20">Reject</button>
               </div>
             )}
 
@@ -387,9 +432,16 @@ export default function NpdTestingPage() {
                     <input type="date" value={returnDateDraft} onChange={(e) => setReturnDateDraft(e.target.value)}
                       className="w-full rounded-xl border border-[#1a3a6e]/50 bg-[#0a1e42] px-3 py-2.5 text-sm text-[#ddeeff] outline-none focus:border-[#2a6aaa]" />
                   </label>
-                  <button onClick={saveReply} className="w-full rounded-xl bg-[#1a4a8a] py-2.5 text-sm font-medium text-[#ddeeff] hover:opacity-90">
-                    {holdProduct.factoryComm.replyAt ? "Update reply" : "Save reply"}
-                  </button>
+                  <div className="flex gap-2">
+                    <button onClick={saveReply} className="flex-1 rounded-xl bg-[#1a4a8a] py-2.5 text-sm font-medium text-[#ddeeff] hover:opacity-90">
+                      {holdProduct.factoryComm.replyAt ? "Update reply" : "Save reply"}
+                    </button>
+                    {!isQA && (
+                      <button onClick={rejectFromHold} className="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-2.5 text-sm font-semibold text-red-400 hover:bg-red-500/20">
+                        Reject
+                      </button>
+                    )}
+                  </div>
 
                   {holdProduct.factoryComm.editHistory.length > 0 && (
                     <div className="rounded-xl bg-[#0a1e42] px-4 py-3 space-y-1">
@@ -407,6 +459,31 @@ export default function NpdTestingPage() {
           </div>
         )}
       </Modal>
+
+      {/* Rejected / archived section */}
+      {products.filter((p) => p.status === "Rejected").length > 0 && (
+        <div className="mt-10">
+          <p className="text-sm font-semibold text-[#5a8fc4]">Rejected ({products.filter((p) => p.status === "Rejected").length})</p>
+          <p className="mt-0.5 text-xs text-[#3a5a8a]">Archived products. Restore to put back into Pending NPD.</p>
+          <div className="mt-3 space-y-2">
+            {products.filter((p) => p.status === "Rejected").map((p) => (
+              <div key={p.id} className="flex items-center gap-3 rounded-xl border border-[#1a3a6e]/30 bg-[#060f26]/60 px-5 py-3 opacity-70">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-[#90bce0]">{p.codeName}</p>
+                  <p className="text-xs text-[#3a5a8a]">{p.skuCode} · Rejected {p.statusChangedAt ? new Date(p.statusChangedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : ""}</p>
+                </div>
+                <Chip color="#a14a3d" label="Rejected" />
+                {!isQA && (
+                  <button onClick={() => restoreProduct(p.id, p.codeName)}
+                    className="shrink-0 rounded-lg border border-[#2a6aaa]/40 px-3 py-1.5 text-xs font-medium text-[#90bce0] hover:bg-[#1a4a8a]/30 hover:text-[#ddeeff]">
+                    Restore
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </AppShell>
   );
 }

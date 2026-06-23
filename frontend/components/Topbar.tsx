@@ -8,7 +8,7 @@ import { getSession, Session } from "@/lib/auth";
 import { Menu } from "lucide-react";
 import { NotificationBell } from "./NotificationBell";
 
-const PRIORITY_OPTIONS = ["P1 — Urgent", "P2 — High", "P3 — Medium", "P4 — Low"];
+const PRIORITY_OPTIONS = ["Urgent", "P1 — High", "P2 — Medium", "P3 — Low"];
 
 // Placeholder — swap for the real QA roster once the backend exists.
 const QA_OPTIONS = ["Ms. Shirin Memon", "Mr. Rohan Dave", "Ms. Aisha Khan"];

@@ -4,7 +4,7 @@ import { createContext, useContext, useState, ReactNode, Dispatch, SetStateActio
 import type { Role } from "./auth";
 
 export type Status = "Pending NPD" | "Pending Decision" | "Approved" | "On hold" | "Rejected";
-export type Priority = "Low" | "Medium" | "High";
+export type Priority = "Low" | "Medium" | "High" | "Urgent";
 export type FactoryAction = "EMAIL_FACTORY" | "DROP" | null;
 
 export interface ActivityEntry {
@@ -65,7 +65,13 @@ export interface GoldenWorkflow {
     sampleIdReceived: string;
     sampleReceivedAt: string | null;
     keyLineDrawingAt: string | null;
+    keyLineDrawingImageUrl: string | null;
+    keyLineDrawingApprovedAt: string | null;
+    keyLineDrawingRejectedAt: string | null;
     artworkStartedAt: string | null;
+    artworkImageUrl: string | null;
+    artworkApprovedAt: string | null;
+    artworkRejectedAt: string | null;
     releasedAt: string | null;
     log: ActivityEntry[];
   } | null;
@@ -139,7 +145,7 @@ const initialProducts: ProductRow[] = [
       ],
       details: { productName: "Aria Knit Tee", skuCode: "URB-KT-001", colour: "Slate Blue", markings: "Embossed logo, EU rating label", savedAt: "2026-06-11T11:00:00" },
       compliance: { status: "Under review", expectedDate: "2026-07-01", confirmedAt: null, log: [{ action: "Compliance review started", timestamp: "2026-06-11T11:00:00" }] },
-      packaging: { vendorName: "PackCo Ltd", vendorSetAt: "2026-06-11T11:00:00", sampleIdReceived: "PKG-0091", sampleReceivedAt: "2026-06-15T10:00:00", keyLineDrawingAt: null, artworkStartedAt: null, releasedAt: null, log: [{ action: "Vendor assigned: PackCo Ltd", timestamp: "2026-06-11T11:00:00" }, { action: "Packaging sample received — PKG-0091", timestamp: "2026-06-15T10:00:00" }] },
+      packaging: { vendorName: "PackCo Ltd", vendorSetAt: "2026-06-11T11:00:00", sampleIdReceived: "PKG-0091", sampleReceivedAt: "2026-06-15T10:00:00", keyLineDrawingAt: null, keyLineDrawingImageUrl: null, keyLineDrawingApprovedAt: null, keyLineDrawingRejectedAt: null, artworkStartedAt: null, artworkImageUrl: null, artworkApprovedAt: null, artworkRejectedAt: null, releasedAt: null, log: [{ action: "Vendor assigned: PackCo Ltd", timestamp: "2026-06-11T11:00:00" }, { action: "Packaging sample received — PKG-0091", timestamp: "2026-06-15T10:00:00" }] },
       goldenSample: { status: "Requested", expectedDate: "2026-07-05", receivedAt: null, log: [{ action: "Golden sample requested", timestamp: "2026-06-11T11:00:00" }] },
     },
   },
@@ -245,8 +251,10 @@ const initialProducts: ProductRow[] = [
 ];
 
 function mapPriority(label: string): Priority {
-  if (label.startsWith("P1") || label.startsWith("P2")) return "High";
-  if (label.startsWith("P3")) return "Medium";
+  if (label === "Urgent") return "Urgent";
+  if (label.startsWith("P1")) return "High";
+  if (label.startsWith("P2")) return "Medium";
+  if (label.startsWith("P3")) return "Low";
   return "Low";
 }
 
