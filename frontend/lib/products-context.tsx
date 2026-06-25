@@ -3,14 +3,36 @@
 import { createContext, useContext, useState, ReactNode, Dispatch, SetStateAction } from "react";
 import type { Role } from "./auth";
 
-export type Status = "Pending NPD" | "Pending Decision" | "Approved" | "On hold" | "Rejected";
+export type Status = "Pending NPD" | "Pending Decision" | "Approved" | "On hold" | "Rejected" | "Archived";
+
+export interface RejectionComment {
+  by: string;
+  reason: string;
+  timestamp: string;
+}
 export type Priority = "Low" | "Medium" | "High" | "Urgent";
 export type FactoryAction = "EMAIL_FACTORY" | "DROP" | null;
+
+export interface ColorOrder {
+  color: string;
+  quantity: number;
+}
+
+export interface OrderDecision {
+  state: "pending" | "held" | "dropped" | "placed";
+  internalCode: string;
+  decidedAt: string | null;
+  decidedBy: string | null;
+  colors: ColorOrder[];
+  improvedGoldenSampleExpected?: boolean;
+  improvementNotes?: string;
+}
 
 export interface ActivityEntry {
   action: string;
   timestamp: string;
   note?: string;
+  stages?: string[]; // Excel-style pipeline stage labels for this transition
 }
 
 export interface FactoryComm {
@@ -47,7 +69,9 @@ export interface GoldenWorkflow {
     productName: string;
     skuCode: string;
     colour: string;
-    markings: string;
+    logoMarking: string;
+    ratingLabel: string;
+    bomConfirmedAt: string | null;
     savedAt: string;
   } | null;
 
@@ -62,6 +86,7 @@ export interface GoldenWorkflow {
   packaging: {
     vendorName: string;
     vendorSetAt: string | null;
+    expectedDate: string | null;
     sampleIdReceived: string;
     sampleReceivedAt: string | null;
     keyLineDrawingAt: string | null;
@@ -82,6 +107,7 @@ export interface GoldenWorkflow {
     receivedAt: string | null;
     log: ActivityEntry[];
   } | null;
+  improvedGoldenSampleExpected?: boolean;
 }
 
 export interface NpdReport {
@@ -95,7 +121,9 @@ export interface NpdReport {
 export interface ProductRow {
   id: number;
   codeName: string;
-  skuCode: string;
+  skuCode: string;           // Supplier / factory model number
+  urbnModelNo?: string;      // URBN internal model number — assigned at Golden Product stage
+  colors?: string;
   priority: Priority;
   status: Status;
   deadline: string;
@@ -107,9 +135,11 @@ export interface ProductRow {
   imageDataUrl?: string | null;
   statusChangedAt?: string;
   rejectedBy?: string;
+  rejectionComments?: RejectionComment[];
   npdReport?: NpdReport;
   factoryComm?: FactoryComm;
   approvedWorkflow?: ApprovedWorkflow;
+  orderDecision?: OrderDecision;
   goldenWorkflow?: GoldenWorkflow;
   activityLog: ActivityEntry[];
 }
@@ -118,6 +148,7 @@ export interface NewProductInput {
   productName: string;
   factory: string;
   factorySku: string;
+  colors: string;
   priorityLabel: string;
   specifications: string;
   sampleReceived: boolean;
@@ -128,127 +159,24 @@ export interface NewProductInput {
 }
 
 const initialProducts: ProductRow[] = [
-  {
-    id: 1, codeName: "Aria Knit Tee", skuCode: "FAC-2291", priority: "High",
-    status: "Approved", deadline: "2026-07-12", statusChangedAt: "2026-06-10T09:00:00",
-    activityLog: [
-      { action: "Product added", timestamp: "2026-06-01T08:00:00" },
-      { action: "NPD report submitted — Pass", timestamp: "2026-06-08T10:30:00" },
-      { action: "CEO approved", timestamp: "2026-06-10T09:00:00" },
-    ],
-    npdReport: { fileName: "aria-npd.pdf", fileDataUrl: null, outcome: "Pass", notes: "All specs met.", submittedAt: "2026-06-08T10:30:00" },
-    goldenWorkflow: {
-      purchaseNotifiedAt: "2026-06-10T10:00:00",
-      orderConfirmedAt: "2026-06-11T09:30:00",
-      purchaseLog: [
-        { action: "Purchase team notified", timestamp: "2026-06-10T10:00:00" },
-        { action: "Order confirmed by purchase team", timestamp: "2026-06-11T09:30:00" },
-      ],
-      details: { productName: "Aria Knit Tee", skuCode: "URB-KT-001", colour: "Slate Blue", markings: "Embossed logo, EU rating label", savedAt: "2026-06-11T11:00:00" },
-      compliance: { status: "Under review", expectedDate: "2026-07-01", confirmedAt: null, log: [{ action: "Compliance review started", timestamp: "2026-06-11T11:00:00" }] },
-      packaging: { vendorName: "PackCo Ltd", vendorSetAt: "2026-06-11T11:00:00", sampleIdReceived: "PKG-0091", sampleReceivedAt: "2026-06-15T10:00:00", keyLineDrawingAt: null, keyLineDrawingImageUrl: null, keyLineDrawingApprovedAt: null, keyLineDrawingRejectedAt: null, artworkStartedAt: null, artworkImageUrl: null, artworkApprovedAt: null, artworkRejectedAt: null, releasedAt: null, log: [{ action: "Vendor assigned: PackCo Ltd", timestamp: "2026-06-11T11:00:00" }, { action: "Packaging sample received — PKG-0091", timestamp: "2026-06-15T10:00:00" }] },
-      goldenSample: { status: "Requested", expectedDate: "2026-07-05", receivedAt: null, log: [{ action: "Golden sample requested", timestamp: "2026-06-11T11:00:00" }] },
-    },
-  },
-  {
-    id: 2, codeName: "Coastal Linen Shirt", skuCode: "FAC-2305", priority: "Medium",
-    status: "On hold", deadline: "2026-07-18", statusChangedAt: "2026-06-20T10:15:00",
-    activityLog: [
-      { action: "Product added", timestamp: "2026-06-05T09:00:00" },
-      { action: "NPD report submitted — Pass", timestamp: "2026-06-12T11:00:00" },
-      { action: "CEO put on hold", timestamp: "2026-06-20T10:15:00" },
-      { action: "Factory emailed", timestamp: "2026-06-20T10:15:00" },
-      { action: "Dev team acknowledged", timestamp: "2026-06-20T14:02:00" },
-    ],
-    npdReport: { fileName: "coastal-npd.pdf", fileDataUrl: null, outcome: "Pass", notes: "Minor stitching issue flagged.", submittedAt: "2026-06-12T11:00:00" },
-    factoryComm: {
-      decidedAction: "EMAIL_FACTORY",
-      decidedAt: "2026-06-20T10:15:00",
-      acknowledgedAt: "2026-06-20T14:02:00",
-      replyAt: null, replyText: null, tentativeReturnDate: null,
-      editHistory: [],
-    },
-  },
-  {
-    id: 3, codeName: "Drift Denim Jacket", skuCode: "FAC-2310", priority: "High",
-    status: "Rejected", deadline: "2026-06-30", statusChangedAt: "2026-06-05T14:30:00", rejectedBy: "Arjun (CEO)",
-    activityLog: [
-      { action: "Product added", timestamp: "2026-06-01T10:00:00" },
-      { action: "NPD report submitted — Not Pass", timestamp: "2026-06-05T14:30:00", note: "Structural failure in seam test." },
-      { action: "Archived — failed NPD", timestamp: "2026-06-05T14:30:00" },
-    ],
-    npdReport: { fileName: "drift-npd.pdf", fileDataUrl: null, outcome: "Not Pass", notes: "Structural failure in seam test.", submittedAt: "2026-06-05T14:30:00" },
-  },
-  {
-    id: 4, codeName: "Haven Wool Coat", skuCode: "FAC-2318", priority: "Low",
-    status: "Approved", deadline: "2026-08-02", statusChangedAt: "2026-06-12T11:00:00",
-    goldenWorkflow: { purchaseNotifiedAt: "2026-06-12T12:00:00", orderConfirmedAt: null, purchaseLog: [{ action: "Purchase team notified", timestamp: "2026-06-12T12:00:00" }], details: null, compliance: null, packaging: null, goldenSample: null },
-    activityLog: [
-      { action: "Product added", timestamp: "2026-06-03T09:00:00" },
-      { action: "NPD report submitted — Pass", timestamp: "2026-06-10T09:00:00" },
-      { action: "CEO approved", timestamp: "2026-06-12T11:00:00" },
-    ],
-    npdReport: { fileName: "haven-npd.pdf", fileDataUrl: null, outcome: "Pass", notes: "Excellent quality.", submittedAt: "2026-06-10T09:00:00" },
-  },
-  {
-    id: 5, codeName: "Nomad Cargo Pant", skuCode: "FAC-2322", priority: "Medium",
-    status: "On hold", deadline: "2026-07-25", statusChangedAt: "2026-06-15T09:30:00",
-    activityLog: [
-      { action: "Product added", timestamp: "2026-06-05T12:00:00" },
-      { action: "NPD report submitted — Pass", timestamp: "2026-06-13T10:00:00" },
-      { action: "CEO put on hold", timestamp: "2026-06-15T09:30:00" },
-      { action: "Factory emailed", timestamp: "2026-06-15T09:30:00" },
-      { action: "Dev team acknowledged", timestamp: "2026-06-15T11:05:00" },
-      { action: "Factory reply logged", timestamp: "2026-06-19T16:40:00", note: "Stitching defect fixed, re-sampling now." },
-    ],
-    npdReport: { fileName: "nomad-npd.pdf", fileDataUrl: null, outcome: "Pass", notes: "Pass with minor concern on stitching.", submittedAt: "2026-06-13T10:00:00" },
-    factoryComm: {
-      decidedAction: "EMAIL_FACTORY",
-      decidedAt: "2026-06-15T09:30:00",
-      acknowledgedAt: "2026-06-15T11:05:00",
-      replyAt: "2026-06-19T16:40:00",
-      replyText: "Stitching defect fixed, re-sampling now.",
-      tentativeReturnDate: "2026-07-08",
-      editHistory: [],
-    },
-  },
-  {
-    id: 6, codeName: "Solace Silk Scarf", skuCode: "FAC-2329", priority: "Low",
-    status: "Approved", deadline: "2026-08-10", statusChangedAt: "2026-06-18T08:45:00",
-    goldenWorkflow: { purchaseNotifiedAt: null, orderConfirmedAt: null, purchaseLog: [], details: null, compliance: null, packaging: null, goldenSample: null },
-    activityLog: [
-      { action: "Product added", timestamp: "2026-06-07T09:00:00" },
-      { action: "NPD report submitted — Pass", timestamp: "2026-06-15T14:00:00" },
-      { action: "CEO approved", timestamp: "2026-06-18T08:45:00" },
-    ],
-    npdReport: { fileName: "solace-npd.pdf", fileDataUrl: null, outcome: "Pass", notes: "Premium finish, all checks clear.", submittedAt: "2026-06-15T14:00:00" },
-  },
-  {
-    id: 7, codeName: "Ember Suede Boot", skuCode: "FAC-2334", priority: "High",
-    status: "Rejected", deadline: "2026-07-05", statusChangedAt: "2026-06-08T16:20:00", rejectedBy: "Priya (Dev)",
-    activityLog: [
-      { action: "Product added", timestamp: "2026-06-02T11:00:00" },
-      { action: "NPD report submitted — Not Pass", timestamp: "2026-06-08T16:20:00", note: "Sole adhesion failure." },
-      { action: "Archived — failed NPD", timestamp: "2026-06-08T16:20:00" },
-    ],
-    npdReport: { fileName: "ember-npd.pdf", fileDataUrl: null, outcome: "Not Pass", notes: "Sole adhesion failure.", submittedAt: "2026-06-08T16:20:00" },
-  },
-  {
-    id: 8, codeName: "Lune Knit Dress", skuCode: "FAC-2341", priority: "High",
-    status: "Pending Decision", deadline: "2026-08-15", statusChangedAt: "2026-06-21T09:00:00",
-    activityLog: [
-      { action: "Product added", timestamp: "2026-06-10T09:00:00" },
-      { action: "NPD report submitted — Pass", timestamp: "2026-06-21T09:00:00", note: "All criteria met, ready for CEO review." },
-    ],
-    npdReport: { fileName: "lune-npd.pdf", fileDataUrl: null, outcome: "Pass", notes: "All criteria met, ready for CEO review.", submittedAt: "2026-06-21T09:00:00" },
-  },
-  {
-    id: 9, codeName: "Dusk Linen Trouser", skuCode: "FAC-2349", priority: "Medium",
-    status: "Pending NPD", deadline: "2026-09-01", statusChangedAt: "2026-06-22T10:00:00",
-    activityLog: [
-      { action: "Product added", timestamp: "2026-06-22T10:00:00" },
-    ],
-  },
+  { id: 1,  codeName: "SMPL-001", skuCode: "", urbnModelNo: undefined, colors: undefined, priority: "Medium", status: "Pending NPD", deadline: "2026-09-21", imageDataUrl: "/app-bg2.png", activityLog: [{ action: "Product added", stages: ["NPD TESTING: PENDING"], timestamp: "2026-06-23T09:00:00" }] },
+  { id: 2,  codeName: "SMPL-002", skuCode: "", urbnModelNo: undefined, colors: undefined, priority: "Medium", status: "Pending NPD", deadline: "2026-09-21", imageDataUrl: "/app-bg2.png", activityLog: [{ action: "Product added", stages: ["NPD TESTING: PENDING"], timestamp: "2026-06-23T09:00:00" }] },
+  { id: 3,  codeName: "SMPL-003", skuCode: "", urbnModelNo: undefined, colors: undefined, priority: "Medium", status: "Pending NPD", deadline: "2026-09-21", imageDataUrl: "/app-bg2.png", activityLog: [{ action: "Product added", stages: ["NPD TESTING: PENDING"], timestamp: "2026-06-23T09:00:00" }] },
+  { id: 4,  codeName: "SMPL-004", skuCode: "", urbnModelNo: undefined, colors: undefined, priority: "High",   status: "Pending NPD", deadline: "2026-08-21", imageDataUrl: "/app-bg2.png", activityLog: [{ action: "Product added", stages: ["NPD TESTING: PENDING"], timestamp: "2026-06-22T09:00:00" }] },
+  { id: 5,  codeName: "SMPL-005", skuCode: "", urbnModelNo: undefined, colors: undefined, priority: "High",   status: "Pending NPD", deadline: "2026-08-18", imageDataUrl: "/app-bg2.png", activityLog: [{ action: "Product added", stages: ["NPD TESTING: PENDING"], timestamp: "2026-06-19T09:00:00" }] },
+  { id: 6,  codeName: "SMPL-006", skuCode: "", urbnModelNo: undefined, colors: undefined, priority: "Medium", status: "Pending NPD", deadline: "2026-08-18", imageDataUrl: "/app-bg2.png", activityLog: [{ action: "Product added", stages: ["NPD TESTING: PENDING"], timestamp: "2026-06-19T09:00:00" }] },
+  { id: 7,  codeName: "SMPL-007", skuCode: "", urbnModelNo: undefined, colors: undefined, priority: "Urgent", status: "Pending NPD", deadline: "2026-07-19", imageDataUrl: "/app-bg2.png", activityLog: [{ action: "Product added", stages: ["NPD TESTING: PENDING"], timestamp: "2026-05-20T09:00:00" }] },
+  { id: 8,  codeName: "SMPL-008", skuCode: "", urbnModelNo: undefined, colors: undefined, priority: "Urgent", status: "Pending NPD", deadline: "2026-07-19", imageDataUrl: "/app-bg2.png", activityLog: [{ action: "Product added", stages: ["NPD TESTING: PENDING"], timestamp: "2026-05-20T09:00:00" }] },
+  { id: 9,  codeName: "SMPL-009", skuCode: "", urbnModelNo: undefined, colors: undefined, priority: "High",   status: "Pending NPD", deadline: "2026-07-19", imageDataUrl: "/app-bg2.png", activityLog: [{ action: "Product added", stages: ["NPD TESTING: PENDING"], timestamp: "2026-05-20T09:00:00" }] },
+  { id: 10, codeName: "SMPL-010", skuCode: "", urbnModelNo: undefined, colors: undefined, priority: "High",   status: "Pending NPD", deadline: "2026-07-18", imageDataUrl: "/app-bg2.png", activityLog: [{ action: "Product added", stages: ["NPD TESTING: PENDING"], timestamp: "2026-05-19T09:00:00" }] },
+  { id: 11, codeName: "SMPL-011", skuCode: "", urbnModelNo: undefined, colors: undefined, priority: "High",   status: "Pending NPD", deadline: "2026-08-16", imageDataUrl: "/app-bg2.png", activityLog: [{ action: "Product added", stages: ["NPD TESTING: PENDING"], timestamp: "2026-06-17T09:00:00" }] },
+  { id: 12, codeName: "SMPL-012", skuCode: "", urbnModelNo: undefined, colors: undefined, priority: "Medium", status: "Pending NPD", deadline: "2026-08-05", imageDataUrl: "/app-bg2.png", activityLog: [{ action: "Product added", stages: ["NPD TESTING: PENDING"], timestamp: "2026-06-06T09:00:00" }] },
+  { id: 13, codeName: "SMPL-013", skuCode: "", urbnModelNo: undefined, colors: undefined, priority: "Medium", status: "Pending NPD", deadline: "2026-08-15", imageDataUrl: "/app-bg2.png", activityLog: [{ action: "Product added", stages: ["NPD TESTING: PENDING"], timestamp: "2026-06-16T09:00:00" }] },
+  { id: 14, codeName: "SMPL-014", skuCode: "", urbnModelNo: undefined, colors: undefined, priority: "Medium", status: "Pending NPD", deadline: "2026-08-15", imageDataUrl: "/app-bg2.png", activityLog: [{ action: "Product added", stages: ["NPD TESTING: PENDING"], timestamp: "2026-06-16T09:00:00" }] },
+  { id: 15, codeName: "SMPL-015", skuCode: "", urbnModelNo: undefined, colors: undefined, priority: "High",   status: "Pending NPD", deadline: "2026-08-19", imageDataUrl: "/app-bg2.png", activityLog: [{ action: "Product added", stages: ["NPD TESTING: PENDING"], timestamp: "2026-06-20T09:00:00" }] },
+  { id: 16, codeName: "SMPL-016", skuCode: "", urbnModelNo: undefined, colors: undefined, priority: "Medium", status: "Pending NPD", deadline: "2026-08-21", imageDataUrl: "/app-bg2.png", activityLog: [{ action: "Product added", stages: ["NPD TESTING: PENDING"], timestamp: "2026-06-22T09:00:00" }] },
+  { id: 17, codeName: "SMPL-017", skuCode: "", urbnModelNo: undefined, colors: undefined, priority: "High",   status: "Pending NPD", deadline: "2026-08-05", imageDataUrl: "/app-bg2.png", activityLog: [{ action: "Product added", stages: ["NPD TESTING: PENDING"], timestamp: "2026-06-06T09:00:00" }] },
+  { id: 18, codeName: "SMPL-018", skuCode: "", urbnModelNo: undefined, colors: undefined, priority: "High",   status: "Pending NPD", deadline: "2026-08-04", imageDataUrl: "/app-bg2.png", activityLog: [{ action: "Product added", stages: ["NPD TESTING: PENDING"], timestamp: "2026-06-05T09:00:00" }] },
 ];
 
 function mapPriority(label: string): Priority {
@@ -266,15 +194,19 @@ export interface AppNotification {
   productName: string;
   message: string;
   createdAt: string;
+  read: boolean;
 }
 
 interface ProductsContextValue {
   products: ProductRow[];
   setProducts: Dispatch<SetStateAction<ProductRow[]>>;
   addProduct: (input: NewProductInput) => void;
+  deleteProduct: (id: number) => void;
   notifications: AppNotification[];
-  addNotification: (n: Omit<AppNotification, "id" | "createdAt">) => void;
+  addNotification: (n: Omit<AppNotification, "id" | "createdAt" | "read">) => void;
   dismissNotification: (id: string) => void;
+  markNotificationRead: (id: string) => void;
+  markAllNotificationsRead: (role: Role) => void;
   search: string;
   setSearch: (q: string) => void;
 }
@@ -284,16 +216,27 @@ const ProductsContext = createContext<ProductsContextValue | null>(null);
 export function ProductsProvider({ children }: { children: ReactNode }) {
   const [products, setProducts] = useState<ProductRow[]>(initialProducts);
   const [search, setSearch] = useState("");
-  const [notifications, setNotifications] = useState<AppNotification[]>([
-    { id: "seed-8", targetRoles: ["CEO", "Dev"], productId: 8, productName: "Lune Knit Dress", message: "NPD report passed — awaiting CEO decision.", createdAt: "2026-06-21T09:00:00" },
-  ]);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
 
-  function addNotification(n: Omit<AppNotification, "id" | "createdAt">) {
-    setNotifications((prev) => [{ ...n, id: `${n.productId}-${Date.now()}`, createdAt: new Date().toISOString() }, ...prev]);
+  function addNotification(n: Omit<AppNotification, "id" | "createdAt" | "read">) {
+    setNotifications((prev) => [{ ...n, id: `${n.productId}-${Date.now()}`, createdAt: new Date().toISOString(), read: false }, ...prev]);
   }
 
   function dismissNotification(id: string) {
     setNotifications((prev) => prev.filter((n) => n.id !== id));
+  }
+
+  function markNotificationRead(id: string) {
+    setNotifications((prev) => prev.map((n) => n.id === id ? { ...n, read: true } : n));
+  }
+
+  function markAllNotificationsRead(role: Role) {
+    setNotifications((prev) => prev.map((n) => n.targetRoles.includes(role) ? { ...n, read: true } : n));
+  }
+
+  function deleteProduct(id: number) {
+    setProducts((prev) => prev.filter((p) => p.id !== id));
+    setNotifications((prev) => prev.filter((n) => n.productId !== id));
   }
 
   function addProduct(input: NewProductInput) {
@@ -306,6 +249,7 @@ export function ProductsProvider({ children }: { children: ReactNode }) {
           id: nextId,
           codeName: input.productName,
           skuCode: input.factorySku,
+          colors: input.colors || undefined,
           priority: mapPriority(input.priorityLabel),
           status: "Pending NPD",
           deadline: input.deadline,
@@ -316,14 +260,14 @@ export function ProductsProvider({ children }: { children: ReactNode }) {
           imageName: input.imageName,
           imageDataUrl: input.imageDataUrl,
           statusChangedAt: now,
-          activityLog: [{ action: "Product added", timestamp: now }],
+          activityLog: [{ action: "Product added", stages: ["NPD TESTING: PENDING"], timestamp: now }],
         },
       ];
     });
   }
 
   return (
-    <ProductsContext.Provider value={{ products, setProducts, addProduct, notifications, addNotification, dismissNotification, search, setSearch }}>
+    <ProductsContext.Provider value={{ products, setProducts, addProduct, deleteProduct, notifications, addNotification, dismissNotification, markNotificationRead, markAllNotificationsRead, search, setSearch }}>
       {children}
     </ProductsContext.Provider>
   );

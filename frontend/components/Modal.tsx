@@ -23,11 +23,11 @@ export function Modal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-blue-950/20 backdrop-blur-sm p-4"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md rounded-lg border border-[#1a3a6e]/60 bg-[#060f26] p-6 shadow-2xl max-h-[90vh] overflow-y-auto"
+        className="w-full max-w-md rounded-xl border border-blue-100 bg-white p-6 shadow-2xl shadow-blue-900/10 max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {children}

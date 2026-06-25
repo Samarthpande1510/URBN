@@ -4,12 +4,14 @@ export function Field({
   value,
   onChange,
   placeholder,
+  disabled,
 }: {
   label: string;
   type: string;
   value: string;
   onChange: (v: string) => void;
   placeholder: string;
+  disabled?: boolean;
 }) {
   return (
     <label className="block">
@@ -21,7 +23,8 @@ export function Field({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full rounded-md border border-white/10 bg-[#1c1c1c] px-3.5 py-2.5 text-sm text-white placeholder-[#3d3d3d] outline-none transition focus:border-white/30 focus:ring-1 focus:ring-white/10"
+        disabled={disabled}
+        className="w-full rounded-md border border-white/10 bg-[#1c1c1c] px-3.5 py-2.5 text-sm text-white placeholder-[#3d3d3d] outline-none transition focus:border-white/30 focus:ring-1 focus:ring-white/10 disabled:opacity-50 disabled:cursor-not-allowed"
       />
     </label>
   );

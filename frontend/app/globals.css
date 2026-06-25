@@ -4,9 +4,5 @@
 
 html,
 body {
-  background-color: #020b1e;
-  background-image: url('/app-bg.png');
-  background-size: cover;
-  background-position: center;
-  background-attachment: scroll;
+  background-color: #f0f5ff;
 }

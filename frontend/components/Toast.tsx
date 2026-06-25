@@ -26,9 +26,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[200] flex flex-col items-center gap-2 pointer-events-none">
         {toasts.map((t) => (
           <div key={t.id}
-            className="flex items-center gap-2 rounded-xl border border-green-500/40 bg-[#020b1e]/95 px-4 py-2.5 shadow-lg backdrop-blur animate-in fade-in slide-in-from-bottom-2 duration-200">
+            className="flex items-center gap-2 rounded-xl border border-green-500/40 bg-[#f0f5ff]/95 px-4 py-2.5 shadow-lg backdrop-blur animate-in fade-in slide-in-from-bottom-2 duration-200">
             <CheckCircle size={15} className="text-green-400 shrink-0" />
-            <span className="text-sm text-[#ddeeff]">{t.message}</span>
+            <span className="text-sm text-[#0f172a]">{t.message}</span>
           </div>
         ))}
       </div>

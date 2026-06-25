@@ -1,16 +1,17 @@
 import { Status, Priority } from "./products-context";
 
 export const STATUS_DOT: Record<Status, string> = {
-  "Pending NPD":     "#6366f1", // indigo — neutral/waiting
-  "Pending Decision":"#38bdf8", // sky blue — needs action
-  Approved:          "#22c55e", // emerald green — success
-  "On hold":         "#f59e0b", // amber — caution
-  Rejected:          "#ef4444", // clean red — stopped
+  "Pending NPD":     "#93c5fd",  // blue-300  — waiting/idle
+  "Pending Decision":"#3b82f6",  // blue-500  — needs action
+  Approved:          "#1d4ed8",  // blue-700  — approved/active
+  "On hold":         "#a5b4fc",  // indigo-300 — paused
+  Rejected:          "#94a3b8",  // slate-400  — inactive
+  Archived:          "#cbd5e1",  // slate-300  — closed
 };
 
 export const PRIORITY_DOT: Record<Priority, string> = {
-  Urgent: "#f43f5e", // rose-500 — alarm
-  High:   "#f97316", // orange-500 — elevated
-  Medium: "#eab308", // yellow-500 — moderate
-  Low:    "#94a3b8", // slate-400 — passive
+  Urgent: "#1e3a8a", // blue-900 — most critical
+  High:   "#3b82f6", // blue-500 — elevated
+  Medium: "#93c5fd", // blue-300 — moderate
+  Low:    "#dbeafe", // blue-100 — passive
 };

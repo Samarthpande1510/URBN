@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { ChevronDown, ChevronUp, CheckCircle, Circle } from "lucide-react";
+import { GridBeam } from "@/components/ui/grid-beam";
 import { AppShell } from "@/components/AppShell";
 import { useProducts, ProductRow, GoldenWorkflow, GoldenSampleStatus, ActivityEntry } from "@/lib/products-context";
 import { PRIORITY_DOT } from "@/lib/colors";
@@ -20,11 +21,11 @@ function Step({ done, label, timestamp, pending }: { done: boolean; label: strin
     <div className="flex items-start gap-3 py-1">
       {done
         ? <CheckCircle size={15} className="mt-0.5 shrink-0 text-green-400" />
-        : <Circle size={15} className="mt-0.5 shrink-0 text-[#1a3a6e]" />}
+        : <Circle size={15} className="mt-0.5 shrink-0 text-[#bfdbfe]" />}
       <div className="flex-1">
-        <p className={`text-sm ${done ? "text-[#ddeeff]" : "text-[#5a8fc4]"}`}>{label}</p>
-        {done && <p className="text-xs text-[#f0c060]">{fmt(timestamp)}</p>}
-        {!done && pending && <p className="text-xs text-[#3a5a8a]">{pending}</p>}
+        <p className={`text-sm ${done ? "text-[#0f172a]" : "text-[#64748b]"}`}>{label}</p>
+        {done && <p className="text-xs text-[#d97706]">{fmt(timestamp)}</p>}
+        {!done && pending && <p className="text-xs text-[#94a3b8]">{pending}</p>}
       </div>
     </div>
   );
@@ -35,16 +36,16 @@ function LogPanel({ entries }: { entries: ActivityEntry[] }) {
   if (!entries.length) return null;
   return (
     <div className="mt-2">
-      <button onClick={() => setOpen(!open)} className="flex items-center gap-1 text-xs text-[#3a6a9a] hover:text-[#90bce0]">
+      <button onClick={() => setOpen(!open)} className="flex items-center gap-1 text-xs text-[#64748b] hover:text-[#1d4ed8]">
         {open ? <ChevronUp size={11} /> : <ChevronDown size={11} />} Activity ({entries.length})
       </button>
       {open && (
-        <div className="mt-2 rounded-lg bg-[#020b1e]/60 px-3 py-2 space-y-1.5">
+        <div className="mt-2 rounded-lg bg-[#f0f5ff]/60 px-3 py-2 space-y-1.5">
           {[...entries].reverse().map((e, i) => (
             <div key={i} className="flex gap-3 text-xs">
-              <span className="text-[#f0c060] tabular-nums shrink-0">{fmt(e.timestamp)}</span>
-              <span className="text-[#ddeeff]">{e.action}</span>
-              {e.note && <span className="text-[#90bce0]">— {e.note}</span>}
+              <span className="text-[#d97706] tabular-nums shrink-0">{fmt(e.timestamp)}</span>
+              <span className="text-[#0f172a]">{e.action}</span>
+              {e.note && <span className="text-[#1d4ed8]">— {e.note}</span>}
             </div>
           ))}
         </div>
@@ -56,9 +57,9 @@ function LogPanel({ entries }: { entries: ActivityEntry[] }) {
 function Field({ label, value, onChange, type = "text", placeholder, disabled }: { label: string; value: string; onChange?: (v: string) => void; type?: string; placeholder?: string; disabled?: boolean }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-xs font-normal uppercase tracking-wide text-[#90bce0]">{label}</span>
+      <span className="mb-1 block text-xs font-normal uppercase tracking-wide text-[#1d4ed8]">{label}</span>
       <input type={type} value={value} onChange={onChange ? (e) => onChange(e.target.value) : undefined} placeholder={placeholder} disabled={disabled}
-        className="w-full rounded-md border border-[#1a3a6e]/50 bg-[#0a1e42] px-3 py-2.5 text-sm text-[#ddeeff] outline-none focus:border-[#2a6aaa] placeholder:text-[#5a8fc4] disabled:opacity-50 disabled:cursor-not-allowed" />
+        className="w-full rounded-md border border-[#bfdbfe]/50 bg-[#eff6ff] px-3 py-2.5 text-sm text-[#0f172a] outline-none focus:border-[#93c5fd] placeholder:text-[#64748b] disabled:opacity-50 disabled:cursor-not-allowed" />
     </label>
   );
 }
@@ -66,13 +67,13 @@ function Field({ label, value, onChange, type = "text", placeholder, disabled }:
 function TrackCard({ title, color, done, children }: { title: string; color: string; done: boolean; children: React.ReactNode }) {
   const [open, setOpen] = useState(true);
   return (
-    <div className={`rounded-md border ${done ? "border-green-500/30 bg-green-500/5" : "border-[#1a3a6e]/40 bg-[#060f26]"} overflow-hidden`}>
-      <button onClick={() => setOpen(!open)} className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-[#0a1e42]/30">
+    <div className={`rounded-md border ${done ? "border-green-500/30 bg-green-500/5" : "border-[#bfdbfe]/40 bg-[#ffffff]"} overflow-hidden`}>
+      <button onClick={() => setOpen(!open)} className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-[#eff6ff]/30">
         <div className="flex items-center gap-2">
-          {done ? <CheckCircle size={14} className="text-green-400" /> : <Circle size={14} className="text-[#1a3a6e]" />}
+          {done ? <CheckCircle size={14} className="text-green-400" /> : <Circle size={14} className="text-[#bfdbfe]" />}
           <span className="text-xs font-bold uppercase tracking-wider" style={{ color }}>{title}</span>
         </div>
-        {open ? <ChevronUp size={13} className="text-[#5a8fc4]" /> : <ChevronDown size={13} className="text-[#5a8fc4]" />}
+        {open ? <ChevronUp size={13} className="text-[#64748b]" /> : <ChevronDown size={13} className="text-[#64748b]" />}
       </button>
       {open && <div className="px-4 pb-4 pt-1">{children}</div>}
     </div>
@@ -86,11 +87,13 @@ function GoldenCard({ product, isQA }: { product: ProductRow; isQA: boolean }) {
   const { showToast } = useToast();
   const gw = product.goldenWorkflow!;
 
+  const [urbnModelDraft, setUrbnModelDraft] = useState(product.urbnModelNo ?? "");
   const [detailDraft, setDetailDraft] = useState({
     productName: gw.details?.productName ?? "",
     skuCode: gw.details?.skuCode ?? "",
     colour: gw.details?.colour ?? "",
-    markings: gw.details?.markings ?? "",
+    logoMarking: gw.details?.logoMarking ?? "",
+    ratingLabel: gw.details?.ratingLabel ?? "",
   });
 
   const [compDraft, setCompDraft] = useState({
@@ -101,6 +104,7 @@ function GoldenCard({ product, isQA }: { product: ProductRow; isQA: boolean }) {
   const [packDraft, setPackDraft] = useState({
     vendorName: gw.packaging?.vendorName ?? "",
     sampleId: gw.packaging?.sampleIdReceived ?? "",
+    expectedDate: gw.packaging?.expectedDate ?? "",
   });
 
   const kldFileRef = useRef<HTMLInputElement>(null);
@@ -127,36 +131,53 @@ function GoldenCard({ product, isQA }: { product: ProductRow; isQA: boolean }) {
 
   function notifyPurchase() {
     const t = now();
-    patch((w) => ({ ...w, purchaseNotifiedAt: t, purchaseLog: [...w.purchaseLog, { action: "Purchase team notified", timestamp: t }] }));
-    log({ action: "Purchase team notified", timestamp: t });
-    addNotification({ targetRoles: ["Purchase"], productId: product.id, productName: product.codeName, message: "You have been notified to place an order for this product." });
+    patch((w) => ({ ...w, purchaseNotifiedAt: t, purchaseLog: [...w.purchaseLog, { action: "Purchase team notified", timestamp: t, stages: ["PURCHASE TEAM NOTIFIED"] }] }));
+    log({ action: "Purchase team notified", timestamp: t, stages: ["PURCHASE TEAM NOTIFIED"] });
+    addNotification({ targetRoles: ["Sales"], productId: product.id, productName: product.codeName, message: "You have been notified to place an order for this product." });
     showToast("Purchase team notified");
   }
 
-  const NOTIFY_ALL: Role[] = ["CEO", "Dev", "Purchase"];
+  const NOTIFY_ALL: Role[] = ["CEO", "Dev", "Sales", "QA"];
 
   function confirmOrder() {
     const t = now();
-    patch((w) => ({ ...w, orderConfirmedAt: t, purchaseLog: [...w.purchaseLog, { action: "Order confirmed by purchase team", timestamp: t }] }));
-    log({ action: "Order confirmed by purchase team", timestamp: t });
-    addNotification({ targetRoles: NOTIFY_ALL, productId: product.id, productName: product.codeName, message: "Order confirmed — product details can now be filled in." });
+    patch((w) => ({ ...w, orderConfirmedAt: t, purchaseLog: [...w.purchaseLog, { action: "Order confirmed by purchase team", timestamp: t, stages: ["ORDER CONFIRMED"] }] }));
+    log({ action: "Order confirmed by purchase team", timestamp: t, stages: ["ORDER CONFIRMED"] });
+    addNotification({ targetRoles: NOTIFY_ALL, productId: product.id, productName: product.codeName, message: "Order confirmed — fill in product details (QA + CEO)." });
     showToast("Order confirmed");
   }
 
   function saveDetails() {
     const t = now();
-    const saved = { ...detailDraft, savedAt: t };
+    const saved = { ...detailDraft, bomConfirmedAt: gw.details?.bomConfirmedAt ?? null, savedAt: t };
     const isEdit = !!gw.details;
     patch((w) => ({ ...w, details: saved }));
-    log({ action: isEdit ? "Product details updated" : "Product details saved", timestamp: t, note: `${saved.productName} · ${saved.skuCode}` });
-    addNotification({ targetRoles: NOTIFY_ALL, productId: product.id, productName: product.codeName, message: isEdit ? "Product details updated." : `Product details saved — ${saved.productName} · ${saved.skuCode}` });
+    setProducts((prev) => prev.map((p) => {
+      if (p.id !== product.id) return p;
+      return {
+        ...p,
+        codeName: saved.productName.trim() || p.codeName,
+        skuCode: saved.skuCode.trim() || p.skuCode,
+        urbnModelNo: urbnModelDraft.trim() || p.urbnModelNo,
+      };
+    }));
+    log({ action: isEdit ? "Product details updated" : "Product details saved", timestamp: t, stages: ["PRODUCT DETAILS SAVED"], note: `${saved.productName} · URBN: ${urbnModelDraft || "—"} · Supplier: ${saved.skuCode}` });
+    addNotification({ targetRoles: NOTIFY_ALL, productId: product.id, productName: saved.productName || product.codeName, message: isEdit ? "Product details updated." : `Product details saved — ${saved.productName}` });
     showToast(isEdit ? "Details updated" : "Details saved");
+  }
+
+  function confirmBOM() {
+    const t = now();
+    patch((w) => ({ ...w, details: w.details ? { ...w.details, bomConfirmedAt: t } : w.details }));
+    log({ action: "BOM confirmed", timestamp: t, stages: ["BOM CONFIRMED"] });
+    addNotification({ targetRoles: NOTIFY_ALL, productId: product.id, productName: product.codeName, message: "BOM confirmed ✓" });
+    showToast("BOM confirmed");
   }
 
   function saveCompliance() {
     const t = now();
     const isNew = !gw.compliance;
-    const entry: ActivityEntry = { action: isNew ? "Compliance review started" : "Compliance details updated", timestamp: t };
+    const entry: ActivityEntry = { action: isNew ? "Compliance initiated" : "Compliance details updated", timestamp: t, stages: isNew ? ["COMPLIANCE INITIATED"] : undefined };
     patch((w) => ({
       ...w,
       compliance: {
@@ -166,22 +187,22 @@ function GoldenCard({ product, isQA }: { product: ProductRow; isQA: boolean }) {
       },
     }));
     log(entry);
-    addNotification({ targetRoles: NOTIFY_ALL, productId: product.id, productName: product.codeName, message: isNew ? "Compliance review started." : "Compliance details updated." });
-    showToast(isNew ? "Compliance review started" : "Compliance updated");
+    addNotification({ targetRoles: NOTIFY_ALL, productId: product.id, productName: product.codeName, message: isNew ? "Compliance initiated." : "Compliance details updated." });
+    showToast(isNew ? "Compliance initiated" : "Compliance updated");
   }
 
   function confirmCompliance() {
     const t = now();
-    const entry: ActivityEntry = { action: "Compliance confirmed", timestamp: t };
+    const entry: ActivityEntry = { action: "Compliance confirmed", timestamp: t, stages: ["COMPLIANCE CONFIRMED"] };
     patch((w) => ({ ...w, compliance: w.compliance ? { ...w.compliance, confirmedAt: t, log: [...w.compliance.log, entry] } : w.compliance }));
     log(entry);
     addNotification({ targetRoles: NOTIFY_ALL, productId: product.id, productName: product.codeName, message: "Compliance confirmed ✓" });
     showToast("Compliance confirmed");
   }
 
-  function setPackagingStep(field: "vendorSetAt" | "sampleReceivedAt" | "releasedAt", label: string) {
+  function setPackagingStep(field: "vendorSetAt" | "sampleReceivedAt" | "releasedAt", label: string, stages?: string[]) {
     const t = now();
-    const entry: ActivityEntry = { action: label, timestamp: t };
+    const entry: ActivityEntry = { action: label, timestamp: t, stages };
     patch((w) => ({ ...w, packaging: w.packaging ? { ...w.packaging, [field]: t, log: [...w.packaging.log, entry] } : w.packaging }));
     log(entry);
     addNotification({ targetRoles: NOTIFY_ALL, productId: product.id, productName: product.codeName, message: label });
@@ -190,11 +211,12 @@ function GoldenCard({ product, isQA }: { product: ProductRow; isQA: boolean }) {
 
   function initPackaging() {
     const t = now();
-    const entry: ActivityEntry = { action: `Packaging vendor set: ${packDraft.vendorName}`, timestamp: t };
+    const entry: ActivityEntry = { action: `Packaging initiated — vendor: ${packDraft.vendorName}`, timestamp: t, stages: ["PACKAGING INITIATED"] };
     patch((w) => ({
       ...w,
       packaging: {
         vendorName: packDraft.vendorName, vendorSetAt: t,
+        expectedDate: packDraft.expectedDate || null,
         sampleIdReceived: packDraft.sampleId,
         sampleReceivedAt: packDraft.sampleId ? t : null,
         keyLineDrawingAt: null, keyLineDrawingImageUrl: null, keyLineDrawingApprovedAt: null, keyLineDrawingRejectedAt: null,
@@ -204,8 +226,8 @@ function GoldenCard({ product, isQA }: { product: ProductRow; isQA: boolean }) {
       },
     }));
     log(entry);
-    addNotification({ targetRoles: NOTIFY_ALL, productId: product.id, productName: product.codeName, message: `Packaging started — vendor: ${packDraft.vendorName}` });
-    showToast("Packaging started");
+    addNotification({ targetRoles: NOTIFY_ALL, productId: product.id, productName: product.codeName, message: `Packaging initiated — vendor: ${packDraft.vendorName}` });
+    showToast("Packaging initiated");
   }
 
   function uploadKeyLineDrawing(dataUrl: string, fileName: string) {
@@ -250,7 +272,8 @@ function GoldenCard({ product, isQA }: { product: ProductRow; isQA: boolean }) {
     const t = now();
     const isNew = !gw.goldenSample;
     const received = gsDraft.status === "Received";
-    const entry: ActivityEntry = { action: isNew ? `Golden sample status: ${gsDraft.status}` : `Golden sample updated: ${gsDraft.status}`, timestamp: t };
+    const stages = received ? ["GOLDEN SAMPLE RECEIVED"] : isNew ? ["GOLDEN SAMPLE TRACKING STARTED"] : undefined;
+    const entry: ActivityEntry = { action: isNew ? `Golden sample status: ${gsDraft.status}` : `Golden sample updated: ${gsDraft.status}`, timestamp: t, stages };
     patch((w) => ({
       ...w,
       goldenSample: {
@@ -264,81 +287,136 @@ function GoldenCard({ product, isQA }: { product: ProductRow; isQA: boolean }) {
     showToast(`Golden sample: ${gsDraft.status}`);
   }
 
-  const detailsLocked = !gw.orderConfirmedAt;
-  const tracksLocked = !gw.details;
+  const detailsLocked = false;
+  const complianceLocked = !gw.details;
+  const packAndSampleLocked = !gw.compliance?.confirmedAt;
 
-  const stagesDone = [!!gw.orderConfirmedAt, !!gw.details, !!gw.compliance?.confirmedAt, !!gw.packaging?.releasedAt, gw.goldenSample?.status === "Received"];
+  const stagesDone = [!!gw.details, !!gw.compliance?.confirmedAt, !!gw.packaging?.releasedAt, gw.goldenSample?.status === "Received"];
   const progress = stagesDone.filter(Boolean).length;
 
   return (
-    <div className="rounded-lg border border-[#1a3a6e]/50 bg-[#060f26] overflow-hidden">
+    <GridBeam rows={6} cols={8} colorVariant="colorful" theme="dark" active className="rounded-lg border border-[#bfdbfe]/50 bg-[#ffffff] overflow-hidden">
       {/* Header */}
-      <div className="flex flex-wrap items-center gap-3 border-b border-[#1a3a6e]/40 px-6 py-4">
+      <div className="flex flex-wrap items-center gap-3 border-b border-[#bfdbfe]/40 px-6 py-4">
         <div className="flex-1 min-w-0">
           <p className="text-xl font-semibold text-white">{product.codeName}</p>
-          <p className="text-xs text-[#90bce0] mt-0.5">{product.skuCode} · Deadline <span className="text-[#f0c060] font-semibold">{new Date(product.deadline).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span></p>
+          <p className="text-xs text-[#1d4ed8] mt-0.5">
+            {product.urbnModelNo && <span className="text-[#0f172a] font-medium">{product.urbnModelNo} · </span>}
+            Supplier: {product.skuCode} · Deadline <span className="text-[#d97706] font-semibold">{new Date(product.deadline).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
+          </p>
         </div>
         <Chip color={PRIORITY_DOT[product.priority]} label={product.priority} />
         <div className="flex items-center gap-2">
           <div className="flex gap-1">
             {stagesDone.map((done, i) => (
               <div key={i} className="h-2 w-8 rounded-full transition-colors" title={TRACK_LABELS[i]}
-                style={{ background: done ? TRACK_COLORS[i] : "#1a2a4a" }} />
+                style={{ background: done ? TRACK_COLORS[i] : "#eff6ff" }} />
             ))}
           </div>
-          <span className="text-xs text-[#5a8fc4] tabular-nums">{progress}/5</span>
+          <span className="text-xs text-[#64748b] tabular-nums">{progress}/4</span>
         </div>
       </div>
 
       <div className="p-6 space-y-3">
 
-        {/* Stage 1 — Purchase */}
-        <div className="rounded-md border border-[#1a3a6e]/40 bg-[#060f26] px-5 py-4">
-          <p className="mb-3 text-xs font-bold uppercase tracking-wider text-[#90bce0]">1 — Purchase</p>
-          <div className="space-y-1">
-            <div className="flex items-center justify-between gap-3">
-              <Step done={!!gw.purchaseNotifiedAt} label="Purchase team notified" timestamp={gw.purchaseNotifiedAt} />
-              {!gw.purchaseNotifiedAt && !isQA && (
-                <button onClick={notifyPurchase} className="shrink-0 rounded-lg bg-[#1a4a8a] px-3 py-1.5 text-xs font-medium text-[#ddeeff] hover:opacity-90">Notify</button>
+        {/* Order summary */}
+        {product.orderDecision && (
+          <div className="rounded-md border border-[#93c5fd]/30 bg-[#eff6ff] px-5 py-4">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-[#3b82f6] mb-3">Order</p>
+            <div className="flex flex-wrap gap-x-8 gap-y-2">
+              <div>
+                <p className="text-[10px] text-[#94a3b8] uppercase tracking-wide">Internal code</p>
+                <p className="text-sm font-mono font-semibold text-[#0f172a]">{product.orderDecision.internalCode}</p>
+              </div>
+              {product.orderDecision.decidedBy && (
+                <div>
+                  <p className="text-[10px] text-[#94a3b8] uppercase tracking-wide">Placed by</p>
+                  <p className="text-sm text-[#1d4ed8]">{product.orderDecision.decidedBy}</p>
+                </div>
+              )}
+              {product.orderDecision.decidedAt && (
+                <div>
+                  <p className="text-[10px] text-[#94a3b8] uppercase tracking-wide">Placed on</p>
+                  <p className="text-sm text-[#1d4ed8]">{fmt(product.orderDecision.decidedAt)}</p>
+                </div>
               )}
             </div>
-            <div className="flex items-center justify-between gap-3">
-              <Step done={!!gw.orderConfirmedAt} label="Order confirmed" timestamp={gw.orderConfirmedAt} pending={gw.purchaseNotifiedAt ? "Awaiting purchase confirmation" : "—"} />
-              {gw.purchaseNotifiedAt && !gw.orderConfirmedAt && !isQA && (
-                <button onClick={confirmOrder} className="shrink-0 rounded-lg bg-[#1a4a8a] px-3 py-1.5 text-xs font-medium text-[#ddeeff] hover:opacity-90">Confirm order</button>
-              )}
+            {product.orderDecision.colors.length > 0 && (
+              <div className="mt-3">
+                <p className="text-[10px] text-[#94a3b8] uppercase tracking-wide mb-1.5">Colors &amp; quantities</p>
+                <div className="flex flex-wrap gap-2">
+                  {product.orderDecision.colors.map((c, i) => (
+                    <span key={i} className="rounded border border-[#93c5fd]/40 bg-[#ffffff] px-2.5 py-1 text-xs text-[#0f172a]">
+                      {c.color} <span className="text-[#3b82f6] font-medium">×{c.quantity}</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Improvement requirement notice */}
+        {gw.improvedGoldenSampleExpected && (
+          <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+            <div className="flex items-start gap-2">
+              <span className="text-amber-400 text-base leading-none mt-0.5">⚠</span>
+              <div className="flex-1">
+                <p className="text-xs font-semibold text-amber-300">Improvement requirement</p>
+                {product.orderDecision?.improvementNotes ? (
+                  <p className="text-xs text-amber-200/80 mt-1 whitespace-pre-wrap">{product.orderDecision.improvementNotes}</p>
+                ) : (
+                  <p className="text-xs text-amber-200/60 mt-0.5">Factory must implement improvements before this golden sample is accepted.</p>
+                )}
+              </div>
             </div>
           </div>
-          <LogPanel entries={gw.purchaseLog} />
-        </div>
+        )}
 
-        {/* Stage 2 — Product Details */}
-        <div className={`rounded-md border px-5 py-4 ${detailsLocked ? "border-[#1a3a6e]/20 opacity-50" : "border-[#1a3a6e]/40 bg-[#060f26]"}`}>
-          <p className="mb-1 text-xs font-bold uppercase tracking-wider text-[#90bce0]">2 — Product Details</p>
+        {/* Stage 1 — Product Details */}
+        <div className={`rounded-md border px-5 py-4 ${detailsLocked ? "border-[#bfdbfe]/20 opacity-50" : "border-[#bfdbfe]/40 bg-[#ffffff]"}`}>
+          <p className="mb-1 text-xs font-bold uppercase tracking-wider text-[#1d4ed8]">1 — Product Details</p>
           {detailsLocked ? (
-            <p className="text-xs text-[#3a5a8a]">Unlocks after order is confirmed.</p>
+            <p className="text-xs text-[#94a3b8]">Unlocks after order is confirmed.</p>
           ) : (
             <div className="space-y-3 mt-3">
-              {gw.details && <p className="text-xs text-[#f0c060]">Last saved {fmt(gw.details.savedAt)}</p>}
+              {gw.details && <p className="text-xs text-[#d97706]">Last saved {fmt(gw.details.savedAt)}</p>}
+              <p className="text-[11px] text-[#64748b]">Filled by QA + CEO</p>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <Field label="Product name" value={detailDraft.productName} onChange={isQA ? undefined : (v) => setDetailDraft((d) => ({ ...d, productName: v }))} placeholder="e.g. Aria Knit Tee" disabled={isQA} />
-                <Field label="SKU code" value={detailDraft.skuCode} onChange={isQA ? undefined : (v) => setDetailDraft((d) => ({ ...d, skuCode: v }))} placeholder="e.g. URB-KT-001" disabled={isQA} />
-                <Field label="Colour" value={detailDraft.colour} onChange={isQA ? undefined : (v) => setDetailDraft((d) => ({ ...d, colour: v }))} placeholder="e.g. Slate Blue" disabled={isQA} />
-                <Field label="Markings" value={detailDraft.markings} onChange={isQA ? undefined : (v) => setDetailDraft((d) => ({ ...d, markings: v }))} placeholder="e.g. Embossed logo, EU label" disabled={isQA} />
+                <Field label="Product name" value={detailDraft.productName} onChange={(v) => setDetailDraft((d) => ({ ...d, productName: v }))} placeholder="e.g. URBN 10000mAh Hyper Magtag" />
+                <Field label="URBN model no." value={urbnModelDraft} onChange={setUrbnModelDraft} placeholder="e.g. UPR135" />
+                <Field label="Supplier / SKU code" value={detailDraft.skuCode} onChange={(v) => setDetailDraft((d) => ({ ...d, skuCode: v }))} placeholder="e.g. BW-C5" />
+                <Field label="Colour" value={detailDraft.colour} onChange={(v) => setDetailDraft((d) => ({ ...d, colour: v }))} placeholder="e.g. Black, White" />
+                <Field label="Logo marking" value={detailDraft.logoMarking} onChange={(v) => setDetailDraft((d) => ({ ...d, logoMarking: v }))} placeholder="e.g. Embossed URBN logo on back" />
+                <Field label="Rating label" value={detailDraft.ratingLabel} onChange={(v) => setDetailDraft((d) => ({ ...d, ratingLabel: v }))} placeholder="e.g. BIS cert label, CE label" />
               </div>
-              {!isQA && (
-                <button onClick={saveDetails} className="w-full rounded-md bg-[#1a4a8a] py-2.5 text-sm font-medium text-[#ddeeff] hover:opacity-90">
-                  {gw.details ? "Update details" : "Save details"}
-                </button>
+              <button onClick={saveDetails} className="w-full rounded-md bg-[#2563eb] py-2.5 text-sm font-medium text-[#0f172a] hover:opacity-90">
+                {gw.details ? "Update details" : "Save details"}
+              </button>
+              {/* BOM Confirmation */}
+              {gw.details && (
+                <div className={`rounded-md border px-4 py-3 flex items-center justify-between gap-3 ${gw.details.bomConfirmedAt ? "border-green-500/30 bg-green-500/5" : "border-[#bfdbfe]/40 bg-[#eff6ff]"}`}>
+                  <div>
+                    <p className="text-xs font-medium text-[#0f172a]">BOM Confirmation</p>
+                    {gw.details.bomConfirmedAt
+                      ? <p className="text-xs text-green-400 flex items-center gap-1 mt-0.5"><CheckCircle size={11} /> Confirmed {fmt(gw.details.bomConfirmedAt)}</p>
+                      : <p className="text-xs text-[#94a3b8] mt-0.5">Confirm bill of materials is finalised</p>}
+                  </div>
+                  {!gw.details.bomConfirmedAt && (
+                    <button onClick={confirmBOM} className="shrink-0 rounded-md border border-green-500/40 bg-green-500/10 px-3 py-1.5 text-xs font-medium text-green-400 hover:bg-green-500/20">
+                      Confirm BOM
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           )}
         </div>
 
-        {/* Stage 3 — Tracks (unlocked after details saved) */}
-        {!tracksLocked ? (
+        {/* Stage 2 — Compliance (unlocks after details saved) */}
+        {!complianceLocked ? (
           <div className="space-y-3">
-            <p className="text-xs font-bold uppercase tracking-wider text-[#5a8fc4] px-1">3 — Parallel Tracks</p>
+            <p className="text-xs font-bold uppercase tracking-wider text-[#64748b] px-1">2 — Compliance</p>
 
             {/* Compliance */}
             <TrackCard title="Compliance" color="#a78bfa" done={!!gw.compliance?.confirmedAt}>
@@ -348,7 +426,7 @@ function GoldenCard({ product, isQA }: { product: ProductRow; isQA: boolean }) {
                     <Field label="Status" value={compDraft.status} onChange={(v) => setCompDraft((d) => ({ ...d, status: v }))} placeholder="e.g. Under review" />
                     <Field label="Expected date" type="date" value={compDraft.expectedDate} onChange={(v) => setCompDraft((d) => ({ ...d, expectedDate: v }))} />
                     <div className="flex gap-2">
-                      <button onClick={saveCompliance} className="flex-1 rounded-md bg-[#1a3a6e]/60 py-2 text-xs font-medium text-[#ddeeff] hover:bg-[#1a4a8a]">
+                      <button onClick={saveCompliance} className="flex-1 rounded-md bg-[#bfdbfe]/60 py-2 text-xs font-medium text-[#0f172a] hover:bg-[#2563eb]">
                         {gw.compliance ? "Update" : "Start"}
                       </button>
                       {gw.compliance && !gw.compliance.confirmedAt && (
@@ -361,49 +439,63 @@ function GoldenCard({ product, isQA }: { product: ProductRow; isQA: boolean }) {
                 )}
                 {gw.compliance && (
                   <div className="space-y-1">
-                    <p className="text-xs text-[#90bce0]">Status: <span className="text-[#ddeeff]">{gw.compliance.status}</span></p>
-                    {gw.compliance.expectedDate && <p className="text-xs text-[#90bce0]">Expected: <span className="text-[#f0c060]">{gw.compliance.expectedDate}</span></p>}
+                    <p className="text-xs text-[#1d4ed8]">Status: <span className="text-[#0f172a]">{gw.compliance.status}</span></p>
+                    {gw.compliance.expectedDate && <p className="text-xs text-[#1d4ed8]">Expected: <span className="text-[#d97706]">{gw.compliance.expectedDate}</span></p>}
                     {gw.compliance.confirmedAt && <p className="text-xs text-green-400 flex items-center gap-1"><CheckCircle size={11} /> Confirmed {fmt(gw.compliance.confirmedAt)}</p>}
                   </div>
                 )}
                 {gw.compliance && <LogPanel entries={gw.compliance.log} />}
               </div>
             </TrackCard>
+          </div>
+        ) : gw.orderConfirmedAt ? (
+          <div className="rounded-md border border-dashed border-[#bfdbfe]/50 px-5 py-4 text-xs text-[#64748b]">
+            Complete Stage 1 (product details) to unlock compliance.
+          </div>
+        ) : null}
+
+        {/* Stage 3 — Packaging + Golden Sample (unlocks after compliance confirmed) */}
+        {!complianceLocked && (
+          !packAndSampleLocked ? (
+          <div className="space-y-3">
+            <p className="text-xs font-bold uppercase tracking-wider text-[#64748b] px-1">3 — Packaging &amp; Golden Sample</p>
 
             {/* Packaging */}
-            <TrackCard title="Packaging" color="#38bdf8" done={!!gw.packaging?.releasedAt}>
+            <TrackCard title="Packaging" color="#0ea5e9" done={!!gw.packaging?.releasedAt}>
               <div className="space-y-2 mt-1">
                 {!gw.packaging ? (
                   !isQA ? (
                     <div className="space-y-3">
                       <Field label="Vendor name" value={packDraft.vendorName} onChange={(v) => setPackDraft((d) => ({ ...d, vendorName: v }))} placeholder="e.g. PackCo Ltd" />
                       <Field label="Packaging sample ID" value={packDraft.sampleId} onChange={(v) => setPackDraft((d) => ({ ...d, sampleId: v }))} placeholder="e.g. PKG-0091" />
-                      <button onClick={initPackaging} disabled={!packDraft.vendorName} className="w-full rounded-md bg-[#1a3a6e]/60 py-2 text-xs font-medium text-[#ddeeff] hover:bg-[#1a4a8a] disabled:opacity-40">
-                        Start packaging
+                      <Field label="Expected completion date" type="date" value={packDraft.expectedDate} onChange={(v) => setPackDraft((d) => ({ ...d, expectedDate: v }))} />
+                      <button onClick={initPackaging} disabled={!packDraft.vendorName} className="w-full rounded-md bg-[#bfdbfe]/60 py-2 text-xs font-medium text-[#0f172a] hover:bg-[#2563eb] disabled:opacity-40">
+                        Initiate packaging
                       </button>
                     </div>
-                  ) : <p className="text-xs text-[#3a5a8a]">Not started yet.</p>
+                  ) : <p className="text-xs text-[#94a3b8]">Not started yet.</p>
                 ) : (
                   <div className="space-y-3">
-                    {/* Vendor + Sample */}
+                    {/* Vendor + ETA */}
                     <Step done={!!gw.packaging.vendorSetAt} label={`Vendor: ${gw.packaging.vendorName}`} timestamp={gw.packaging.vendorSetAt} />
+                    {gw.packaging.expectedDate && <p className="ml-7 text-xs text-[#d97706]">ETA: {gw.packaging.expectedDate}</p>}
                     <div>
                       <Step done={!!gw.packaging.sampleReceivedAt} label={`Sample${gw.packaging.sampleIdReceived ? ` — ${gw.packaging.sampleIdReceived}` : ""} received`} timestamp={gw.packaging.sampleReceivedAt} />
                       {!isQA && !gw.packaging.sampleReceivedAt && (
-                        <button onClick={() => setPackagingStep("sampleReceivedAt", `Packaging sample received — ${gw.packaging!.sampleIdReceived}`)} className="ml-6 mt-1 rounded-lg bg-[#1a3a6e]/60 px-3 py-1 text-xs text-[#ddeeff] hover:bg-[#1a4a8a]">Mark received</button>
+                        <button onClick={() => setPackagingStep("sampleReceivedAt", `Packaging sample received — ${gw.packaging!.sampleIdReceived}`)} className="ml-6 mt-1 rounded-lg bg-[#bfdbfe]/60 px-3 py-1 text-xs text-[#0f172a] hover:bg-[#2563eb]">Mark received</button>
                       )}
                     </div>
 
                     {/* Key Line Drawing */}
                     {gw.packaging.sampleReceivedAt && (
-                      <div className="rounded-lg border border-[#1a3a6e]/40 bg-[#020b1e]/40 p-3 space-y-2">
-                        <p className="text-xs font-normal uppercase tracking-wide text-[#90bce0]">Key Line Drawing</p>
+                      <div className="rounded-lg border border-[#bfdbfe]/40 bg-[#f0f5ff]/40 p-3 space-y-2">
+                        <p className="text-xs font-normal uppercase tracking-wide text-[#1d4ed8]">Key Line Drawing</p>
 
                         {gw.packaging.keyLineDrawingImageUrl ? (
                           <>
                             {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={gw.packaging.keyLineDrawingImageUrl} alt="Key line drawing" className="w-full rounded-lg object-contain max-h-48 bg-[#0a1e42]" />
-                            <p className="text-[10px] text-[#5a8fc4]">Uploaded {fmt(gw.packaging.keyLineDrawingAt)}</p>
+                            <img src={gw.packaging.keyLineDrawingImageUrl} alt="Key line drawing" className="w-full rounded-lg object-contain max-h-48 bg-[#eff6ff]" />
+                            <p className="text-[10px] text-[#64748b]">Uploaded {fmt(gw.packaging.keyLineDrawingAt)}</p>
                             {!gw.packaging.keyLineDrawingApprovedAt && !gw.packaging.keyLineDrawingRejectedAt && !isQA && (
                               <div className="flex gap-2">
                                 <button onClick={() => decideKeyLineDrawing(true)} className="flex-1 rounded-lg border border-green-500/40 bg-green-500/10 py-1.5 text-xs font-medium text-green-400 hover:bg-green-500/20">Approve</button>
@@ -415,17 +507,17 @@ function GoldenCard({ product, isQA }: { product: ProductRow; isQA: boolean }) {
                               <div className="space-y-1.5">
                                 <p className="text-xs text-red-400">✕ Rejected {fmt(gw.packaging.keyLineDrawingRejectedAt)} — re-upload to try again</p>
                                 {!isQA && (
-                                  <button onClick={() => kldFileRef.current?.click()} className="w-full rounded-lg border border-dashed border-[#1a3a6e]/50 py-1.5 text-xs text-[#90bce0] hover:bg-[#0a1e42]">Re-upload</button>
+                                  <button onClick={() => kldFileRef.current?.click()} className="w-full rounded-lg border border-dashed border-[#bfdbfe]/50 py-1.5 text-xs text-[#1d4ed8] hover:bg-[#eff6ff]">Re-upload</button>
                                 )}
                               </div>
                             )}
                           </>
                         ) : !isQA ? (
-                          <button onClick={() => kldFileRef.current?.click()} className="flex w-full flex-col items-center justify-center rounded-lg border-2 border-dashed border-[#1a3a6e]/50 py-4 text-xs text-[#5a8fc4] hover:bg-[#0a1e42]">
+                          <button onClick={() => kldFileRef.current?.click()} className="flex w-full flex-col items-center justify-center rounded-lg border-2 border-dashed border-[#bfdbfe]/50 py-4 text-xs text-[#64748b] hover:bg-[#eff6ff]">
                             <span className="text-lg">↑</span> Upload image
                           </button>
                         ) : (
-                          <p className="text-xs text-[#3a5a8a]">No image uploaded yet.</p>
+                          <p className="text-xs text-[#94a3b8]">No image uploaded yet.</p>
                         )}
                         <input ref={kldFileRef} type="file" accept="image/*" className="hidden"
                           onChange={(e) => {
@@ -440,14 +532,14 @@ function GoldenCard({ product, isQA }: { product: ProductRow; isQA: boolean }) {
 
                     {/* Artwork */}
                     {gw.packaging.keyLineDrawingApprovedAt && (
-                      <div className="rounded-lg border border-[#1a3a6e]/40 bg-[#020b1e]/40 p-3 space-y-2">
-                        <p className="text-xs font-normal uppercase tracking-wide text-[#90bce0]">Artwork</p>
+                      <div className="rounded-lg border border-[#bfdbfe]/40 bg-[#f0f5ff]/40 p-3 space-y-2">
+                        <p className="text-xs font-normal uppercase tracking-wide text-[#1d4ed8]">Artwork</p>
 
                         {gw.packaging.artworkImageUrl ? (
                           <>
                             {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={gw.packaging.artworkImageUrl} alt="Artwork" className="w-full rounded-lg object-contain max-h-48 bg-[#0a1e42]" />
-                            <p className="text-[10px] text-[#5a8fc4]">Uploaded {fmt(gw.packaging.artworkStartedAt)}</p>
+                            <img src={gw.packaging.artworkImageUrl} alt="Artwork" className="w-full rounded-lg object-contain max-h-48 bg-[#eff6ff]" />
+                            <p className="text-[10px] text-[#64748b]">Uploaded {fmt(gw.packaging.artworkStartedAt)}</p>
                             {!gw.packaging.artworkApprovedAt && !gw.packaging.artworkRejectedAt && !isQA && (
                               <div className="flex gap-2">
                                 <button onClick={() => decideArtwork(true)} className="flex-1 rounded-lg border border-green-500/40 bg-green-500/10 py-1.5 text-xs font-medium text-green-400 hover:bg-green-500/20">Approve</button>
@@ -459,17 +551,17 @@ function GoldenCard({ product, isQA }: { product: ProductRow; isQA: boolean }) {
                               <div className="space-y-1.5">
                                 <p className="text-xs text-red-400">✕ Rejected {fmt(gw.packaging.artworkRejectedAt)} — re-upload to try again</p>
                                 {!isQA && (
-                                  <button onClick={() => artFileRef.current?.click()} className="w-full rounded-lg border border-dashed border-[#1a3a6e]/50 py-1.5 text-xs text-[#90bce0] hover:bg-[#0a1e42]">Re-upload</button>
+                                  <button onClick={() => artFileRef.current?.click()} className="w-full rounded-lg border border-dashed border-[#bfdbfe]/50 py-1.5 text-xs text-[#1d4ed8] hover:bg-[#eff6ff]">Re-upload</button>
                                 )}
                               </div>
                             )}
                           </>
                         ) : !isQA ? (
-                          <button onClick={() => artFileRef.current?.click()} className="flex w-full flex-col items-center justify-center rounded-lg border-2 border-dashed border-[#1a3a6e]/50 py-4 text-xs text-[#5a8fc4] hover:bg-[#0a1e42]">
+                          <button onClick={() => artFileRef.current?.click()} className="flex w-full flex-col items-center justify-center rounded-lg border-2 border-dashed border-[#bfdbfe]/50 py-4 text-xs text-[#64748b] hover:bg-[#eff6ff]">
                             <span className="text-lg">↑</span> Upload artwork
                           </button>
                         ) : (
-                          <p className="text-xs text-[#3a5a8a]">No artwork uploaded yet.</p>
+                          <p className="text-xs text-[#94a3b8]">No artwork uploaded yet.</p>
                         )}
                         <input ref={artFileRef} type="file" accept="image/*" className="hidden"
                           onChange={(e) => {
@@ -487,7 +579,7 @@ function GoldenCard({ product, isQA }: { product: ProductRow; isQA: boolean }) {
                       <div>
                         <Step done={!!gw.packaging.releasedAt} label="Released (packaging + user manual)" timestamp={gw.packaging.releasedAt} />
                         {!isQA && !gw.packaging.releasedAt && (
-                          <button onClick={() => setPackagingStep("releasedAt", "Packaging and user manual released")} className="ml-6 mt-1 rounded-lg border border-green-500/40 bg-green-500/10 px-3 py-1 text-xs font-medium text-green-400 hover:bg-green-500/20">Mark released</button>
+                          <button onClick={() => setPackagingStep("releasedAt", "Packaging and user manual released", ["PACKAGING RELEASED"])} className="ml-6 mt-1 rounded-lg border border-green-500/40 bg-green-500/10 px-3 py-1 text-xs font-medium text-green-400 hover:bg-green-500/20">Mark released</button>
                         )}
                       </div>
                     )}
@@ -503,26 +595,26 @@ function GoldenCard({ product, isQA }: { product: ProductRow; isQA: boolean }) {
                 {!isQA && (
                   <>
                     <div>
-                      <span className="mb-1.5 block text-xs font-normal uppercase tracking-wide text-[#90bce0]">Status</span>
+                      <span className="mb-1.5 block text-xs font-normal uppercase tracking-wide text-[#1d4ed8]">Status</span>
                       <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
                         {(["Not started", "Requested", "In progress", "Received"] as GoldenSampleStatus[]).map((s) => (
                           <button key={s} type="button" onClick={() => setGsDraft((d) => ({ ...d, status: s }))}
-                            className={`rounded-lg border py-1.5 text-xs font-medium transition ${gsDraft.status === s ? "border-[#e8a020] bg-[#e8a020]/20 text-[#e8a020]" : "border-[#1a3a6e]/50 bg-[#0a1e42] text-[#5a8fc4] hover:bg-[#0d2550]"}`}>
+                            className={`rounded-lg border py-1.5 text-xs font-medium transition ${gsDraft.status === s ? "border-[#f59e0b] bg-[#f59e0b]/20 text-[#f59e0b]" : "border-[#bfdbfe]/50 bg-[#eff6ff] text-[#64748b] hover:bg-[#dbeafe]"}`}>
                             {s}
                           </button>
                         ))}
                       </div>
                     </div>
                     <Field label="Expected date" type="date" value={gsDraft.expectedDate} onChange={(v) => setGsDraft((d) => ({ ...d, expectedDate: v }))} />
-                    <button onClick={saveGoldenSample} className="w-full rounded-md bg-[#1a3a6e]/60 py-2 text-xs font-medium text-[#ddeeff] hover:bg-[#1a4a8a]">
+                    <button onClick={saveGoldenSample} className="w-full rounded-md bg-[#bfdbfe]/60 py-2 text-xs font-medium text-[#0f172a] hover:bg-[#2563eb]">
                       {gw.goldenSample ? "Update" : "Start tracking"}
                     </button>
                   </>
                 )}
                 {gw.goldenSample && (
                   <div className="space-y-1">
-                    <p className="text-xs text-[#90bce0]">Status: <span className={gw.goldenSample.status === "Received" ? "text-green-400" : "text-[#e8a020]"}>{gw.goldenSample.status}</span></p>
-                    {gw.goldenSample.expectedDate && <p className="text-xs text-[#90bce0]">Expected: <span className="text-[#f0c060]">{gw.goldenSample.expectedDate}</span></p>}
+                    <p className="text-xs text-[#1d4ed8]">Status: <span className={gw.goldenSample.status === "Received" ? "text-green-400" : "text-[#f59e0b]"}>{gw.goldenSample.status}</span></p>
+                    {gw.goldenSample.expectedDate && <p className="text-xs text-[#1d4ed8]">Expected: <span className="text-[#d97706]">{gw.goldenSample.expectedDate}</span></p>}
                     {gw.goldenSample.receivedAt && <p className="text-xs text-green-400 flex items-center gap-1"><CheckCircle size={11} /> Received {fmt(gw.goldenSample.receivedAt)}</p>}
                   </div>
                 )}
@@ -530,21 +622,22 @@ function GoldenCard({ product, isQA }: { product: ProductRow; isQA: boolean }) {
               </div>
             </TrackCard>
           </div>
-        ) : gw.orderConfirmedAt ? (
-          <div className="rounded-md border border-dashed border-[#1a3a6e]/50 px-5 py-4 text-xs text-[#5a8fc4]">
-            Complete Stage 2 (product details) to unlock the parallel tracks.
+          ) : (
+          <div className="rounded-md border border-dashed border-[#bfdbfe]/50 px-5 py-4 text-xs text-[#64748b]">
+            Confirm compliance to unlock packaging and golden sample.
           </div>
-        ) : null}
+          )
+        )}
 
       </div>
-    </div>
+    </GridBeam>
   );
 }
 
 // ─── Mini progress bar used in the switcher ───────────────────────────────────
 
-const TRACK_COLORS = ["#38bdf8", "#a78bfa", "#34d399", "#fb923c", "#fbbf24"];
-const TRACK_LABELS = ["Order", "Details", "Compliance", "Packaging", "Golden Sample"];
+const TRACK_COLORS = ["#a78bfa", "#34d399", "#fb923c", "#fbbf24"];
+const TRACK_LABELS = ["Details", "Compliance", "Packaging", "Golden Sample"];
 
 function MiniProgress({ stages }: { stages: boolean[] }) {
   return (
@@ -552,7 +645,7 @@ function MiniProgress({ stages }: { stages: boolean[] }) {
       {stages.map((done, i) => (
         <div key={i} title={TRACK_LABELS[i]}
           className="h-1.5 flex-1 rounded-full transition-colors"
-          style={{ background: done ? TRACK_COLORS[i] : "#1a2a4a" }} />
+          style={{ background: done ? TRACK_COLORS[i] : "#eff6ff" }} />
       ))}
     </div>
   );
@@ -569,7 +662,7 @@ export default function GoldenProductPage() {
 
   const q = search.toLowerCase();
   const approved = products.filter((p) => {
-    if (p.status !== "Approved" || !p.goldenWorkflow) return false;
+    if (p.status !== "Approved" || !p.goldenWorkflow || p.orderDecision?.state !== "placed") return false;
     if (q) return p.codeName.toLowerCase().includes(q) || (p.factory ?? "").toLowerCase().includes(q) || p.skuCode.toLowerCase().includes(q);
     return true;
   });
@@ -583,13 +676,13 @@ export default function GoldenProductPage() {
 
   return (
     <AppShell>
-      <h1 className="text-2xl font-semibold text-white">Golden Product</h1>
-      <p className="mt-1 text-sm text-[#90bce0]">Post-approval workflow — purchase, details, compliance, packaging, golden sample.</p>
-      {isQA && <p className="mt-1 text-xs text-[#f0c060]">You are in read-only mode.</p>}
+      <h1 className="text-2xl font-semibold text-slate-900">Golden Product</h1>
+      <p className="mt-1 text-sm text-[#1d4ed8]">Post-approval workflow — details, compliance, packaging, golden sample.</p>
+      {isQA && <p className="mt-1 text-xs text-[#d97706]">You are in read-only mode.</p>}
 
       {approved.length === 0 ? (
-        <div className="mt-8 rounded-md border border-dashed border-[#1a3a6e]/50 px-5 py-16 text-center text-sm text-[#5a8fc4]">
-          No approved products yet. Approve a product from NPD Testing.
+        <div className="mt-8 rounded-md border border-dashed border-[#bfdbfe]/50 px-5 py-16 text-center text-sm text-[#64748b]">
+          No products here yet. Place an order on the Approved tab to begin the Golden Sample workflow.
         </div>
       ) : (
         <>
@@ -597,14 +690,14 @@ export default function GoldenProductPage() {
           <div className="mt-5 flex gap-2 overflow-x-auto pb-1">
             {approved.map((p) => {
               const gw = p.goldenWorkflow!;
-              const stages = [!!gw.orderConfirmedAt, !!gw.details, !!gw.compliance?.confirmedAt, !!gw.packaging?.releasedAt, gw.goldenSample?.status === "Received"];
+              const stages = [!!gw.details, !!gw.compliance?.confirmedAt, !!gw.packaging?.releasedAt, gw.goldenSample?.status === "Received"];
               const done = stages.filter(Boolean).length;
               const active = p.id === (selected?.id ?? -1);
               return (
                 <button key={p.id} onClick={() => setSelectedId(p.id)}
-                  className={`shrink-0 rounded-md border px-4 py-3 text-left transition min-w-[160px] ${active ? "border-[#38bdf8]/60 bg-[#0a1e42]" : "border-[#1a3a6e]/40 bg-[#060f26] hover:bg-[#0a1e42]/60"}`}>
-                  <p className={`text-sm font-medium truncate ${active ? "text-white" : "text-[#90bce0]"}`}>{p.codeName}</p>
-                  <p className="text-[10px] text-[#5a8fc4] mt-0.5 tabular-nums">{done}/5 complete</p>
+                  className={`shrink-0 rounded-md border px-4 py-3 text-left transition min-w-[160px] ${active ? "border-[#0ea5e9]/60 bg-[#eff6ff]" : "border-[#bfdbfe]/40 bg-[#ffffff] hover:bg-[#eff6ff]/60"}`}>
+                  <p className={`text-sm font-medium truncate ${active ? "text-blue-700 font-semibold" : "text-slate-600"}`}>{p.codeName}</p>
+                  <p className="text-[10px] text-[#64748b] mt-0.5 tabular-nums">{done}/4 complete</p>
                   <MiniProgress stages={stages} />
                 </button>
               );

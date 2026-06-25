@@ -1,4 +1,4 @@
-export type Role = "QA" | "CEO" | "Dev" | "Purchase" | "STAFF";
+export type Role = "QA" | "CEO" | "Dev" | "Sales" | "STAFF";
 
 export interface Session {
   name: string;
@@ -6,45 +6,88 @@ export interface Session {
   role: Role;
 }
 
-const KEY = "urbn_pipeline_session";
-
-export function getRoleFromEmail(email: string): Role {
-  const local = email.split("@")[0]?.toLowerCase() ?? "";
-  const domain = email.split("@")[1]?.toLowerCase() ?? "";
-  if (local.includes("qa") || domain.startsWith("qa")) return "QA";
-  if (local.includes("ceo") || domain.startsWith("ceo")) return "CEO";
-  if (local.includes("dev") || domain.startsWith("dev")) return "Dev";
-  if (local.includes("purchase") || domain.startsWith("purchase")) return "Purchase";
-  return "STAFF";
-}
-
-export function signupMock(name: string, email: string, _password: string): Session {
-  const session: Session = { name, email, role: getRoleFromEmail(email) };
-  localStorage.setItem(KEY, JSON.stringify(session));
-  return session;
-}
-
-export function loginMock(email: string): Session {
-  const existing = getSession();
-  const name = existing?.email === email ? existing.name : email.split("@")[0];
-  const session: Session = { name, email, role: getRoleFromEmail(email) };
-  localStorage.setItem(KEY, JSON.stringify(session));
-  return session;
-}
+const SESSION_KEY = "urbn_session";
+const TOKEN_KEY = "urbn_access_token";
+const REFRESH_KEY = "urbn_refresh_token";
+const API = "http://localhost:8000";
 
 export function getSession(): Session | null {
   if (typeof window === "undefined") return null;
-  const raw = localStorage.getItem(KEY);
+  const raw = localStorage.getItem(SESSION_KEY);
   return raw ? JSON.parse(raw) : null;
 }
 
-export function logout() {
-  localStorage.removeItem(KEY);
+function saveSession(user: { user_name?: string; name?: string; email: string; role: string }, access: string, refresh: string) {
+  const session: Session = {
+    name: user.user_name ?? user.name ?? "",
+    email: user.email,
+    role: user.role as Role,
+  };
+  localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  localStorage.setItem(TOKEN_KEY, access);
+  localStorage.setItem(REFRESH_KEY, refresh);
+}
+
+export function getAccessToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(TOKEN_KEY);
+}
+
+export function getRefreshToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(REFRESH_KEY);
+}
+
+function clearAuth() {
+  localStorage.removeItem(SESSION_KEY);
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(REFRESH_KEY);
+}
+
+export async function login(email: string, password: string): Promise<Session> {
+  const res = await fetch(`${API}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail ?? "Login failed.");
+  saveSession(data.user, data.access_token, data.refresh_token);
+  return getSession()!;
+}
+
+export async function signup(name: string, email: string, password: string): Promise<Session> {
+  const res = await fetch(`${API}/auth/signup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, email, password }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail ?? "Signup failed.");
+  saveSession(data.user, data.access_token, data.refresh_token);
+  return getSession()!;
+}
+
+export async function logout(): Promise<void> {
+  const refresh = getRefreshToken();
+  if (refresh) {
+    try {
+      await fetch(`${API}/auth/logout`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refresh_token: refresh }),
+      });
+    } catch {
+      // network failure on logout is acceptable — clear locally anyway
+    }
+  }
+  clearAuth();
 }
 
 export function validatePassword(password: string): string | null {
   if (password.length < 8) return "Password must be at least 8 characters.";
   if (!/[A-Za-z]/.test(password)) return "Password must include at least one letter.";
   if (!/[0-9]/.test(password)) return "Password must include at least one number.";
+  if (!/[^A-Za-z0-9]/.test(password)) return "Password must include at least one special character (e.g. @, #, !).";
   return null;
 }

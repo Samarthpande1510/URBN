@@ -10,15 +10,12 @@ import { NotificationBell } from "./NotificationBell";
 
 const PRIORITY_OPTIONS = ["Urgent", "P1 — High", "P2 — Medium", "P3 — Low"];
 
-// Placeholder — swap for the real QA roster once the backend exists.
-const QA_OPTIONS = ["Ms. Shirin Memon", "Mr. Rohan Dave", "Ms. Aisha Khan"];
-
 const emptyForm = {
   productName: "",
   factory: "",
   factorySku: "",
+  colors: "",
   priority: PRIORITY_OPTIONS[0],
-  assignedQa: QA_OPTIONS[0],
   specifications: "",
   sampleReceived: false,
   sampleGivenDate: "",
@@ -50,6 +47,7 @@ const emptyForm = {
       productName: form.productName,
       factory: form.factory,
       factorySku: form.factorySku,
+      colors: form.colors,
       priorityLabel: form.priority,
       specifications: form.specifications,
       sampleReceived: form.sampleReceived,
@@ -58,6 +56,7 @@ const emptyForm = {
       imageName,
       imageDataUrl,
     });
+
     setForm(emptyForm);
     setImageName(null);
     setImageDataUrl(null);
@@ -67,35 +66,35 @@ const emptyForm = {
 
   return (
     <>
-      <div className="flex items-center gap-2 border-b border-[#1a3a6e]/40 bg-[#010916]/85 backdrop-blur-sm px-4 py-3 sm:px-6">
+      <div className="flex items-center gap-2 border-b border-blue-100 bg-white/80 backdrop-blur-sm px-4 py-3 sm:px-6 shadow-sm">
         <button
           onClick={onMenuClick}
-          className="shrink-0 rounded p-2 text-[#90bce0] transition hover:bg-[#0d1f3c] hover:text-[#ddeeff] md:hidden"
+          className="shrink-0 rounded p-2 text-slate-500 transition hover:bg-blue-50 hover:text-blue-700 md:hidden"
         >
           <Menu size={18} />
         </button>
 
         {/* Search */}
         <div className="relative min-w-0 flex-1 sm:max-w-sm">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#3a5a8a]" />
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search…"
-            className="w-full rounded border border-[#1a3a6e]/50 bg-[#0d1f3c] py-2 pl-8 pr-3 text-sm text-[#ddeeff] placeholder-[#3a5a8a] outline-none focus:border-[#38bdf8]/50 focus:ring-0"
+            className="w-full rounded-lg border border-blue-100 bg-blue-50/60 py-2 pl-8 pr-3 text-sm text-slate-800 placeholder-slate-400 outline-none focus:border-blue-300 focus:bg-white focus:ring-0 transition"
           />
         </div>
 
         <div className="flex shrink-0 items-center gap-2 ml-auto">
           {session && (
-            <p className="hidden text-sm text-[#5a8fc4] lg:block">
-              Hi, <span className="text-[#ddeeff]">{session.name}</span>
+            <p className="hidden text-sm text-slate-500 lg:block">
+              Hi, <span className="font-medium text-slate-800">{session.name}</span>
             </p>
           )}
           <NotificationBell />
           <button
             onClick={() => setAddOpen(true)}
-            className="shrink-0 rounded bg-[#1a4a8a] px-3 py-2 text-sm font-medium text-[#ddeeff] transition hover:bg-[#1e57a8] sm:px-4"
+            className="shrink-0 rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-blue-700 sm:px-4 shadow-sm"
           >
             <span className="hidden sm:inline">+ Add Product</span>
             <span className="sm:hidden">+</span>
@@ -105,15 +104,15 @@ const emptyForm = {
 
       <Modal open={addOpen} onClose={() => setAddOpen(false)}>
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-[#ddeeff]">Add Product</h2>
-          <button onClick={() => setAddOpen(false)} className="text-[#3a6a9a] hover:text-[#ddeeff]">
+          <h2 className="text-lg font-semibold text-[#0f172a]">Add Product</h2>
+          <button onClick={() => setAddOpen(false)} className="text-[#64748b] hover:text-[#0f172a]">
             ✕
           </button>
         </div>
 
         <form onSubmit={handleSubmit} className="mt-5 space-y-5">
           <div>
-            <label className="mb-1 block text-xs font-normal uppercase tracking-wide text-[#90bce0]">
+            <label className="mb-1 block text-xs font-normal uppercase tracking-wide text-[#1d4ed8]">
               Product name *
             </label>
             <input
@@ -121,13 +120,13 @@ const emptyForm = {
               value={form.productName}
               onChange={(e) => update("productName", e.target.value)}
               placeholder="e.g. Aria Knit Tee"
-              className="w-full rounded-md border border-[#1a3a6e]/50 bg-[#060f26] px-3 py-2.5 text-sm text-[#ddeeff] outline-none focus:border-[#2a6aaa]"
+              className="w-full rounded-md border border-[#bfdbfe]/50 bg-[#ffffff] px-3 py-2.5 text-sm text-[#0f172a] outline-none focus:border-[#93c5fd]"
             />
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <label className="mb-1 block text-xs font-normal uppercase tracking-wide text-[#90bce0]">
+              <label className="mb-1 block text-xs font-normal uppercase tracking-wide text-[#1d4ed8]">
                 Factory *
               </label>
               <input
@@ -135,11 +134,11 @@ const emptyForm = {
                 value={form.factory}
                 onChange={(e) => update("factory", e.target.value)}
                 placeholder="e.g. Shenzhen PowerTech"
-                className="w-full rounded-md border border-[#1a3a6e]/50 bg-[#060f26] px-3 py-2.5 text-sm text-[#ddeeff] outline-none focus:border-[#2a6aaa]"
+                className="w-full rounded-md border border-[#bfdbfe]/50 bg-[#ffffff] px-3 py-2.5 text-sm text-[#0f172a] outline-none focus:border-[#93c5fd]"
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-normal uppercase tracking-wide text-[#90bce0]">
+              <label className="mb-1 block text-xs font-normal uppercase tracking-wide text-[#1d4ed8]">
                 Factory SKU *
               </label>
               <input
@@ -147,44 +146,28 @@ const emptyForm = {
                 value={form.factorySku}
                 onChange={(e) => update("factorySku", e.target.value)}
                 placeholder="e.g. UPR136"
-                className="w-full rounded-md border border-[#1a3a6e]/50 bg-[#060f26] px-3 py-2.5 text-sm text-[#ddeeff] outline-none focus:border-[#2a6aaa]"
+                className="w-full rounded-md border border-[#bfdbfe]/50 bg-[#ffffff] px-3 py-2.5 text-sm text-[#0f172a] outline-none focus:border-[#93c5fd]"
               />
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div>
-              <label className="mb-1 block text-xs font-normal uppercase tracking-wide text-[#90bce0]">
-                Priority *
-              </label>
-              <select
-                value={form.priority}
-                onChange={(e) => update("priority", e.target.value)}
-                className="w-full rounded-md border border-[#1a3a6e]/50 bg-[#060f26] px-3 py-2.5 text-sm text-[#ddeeff] outline-none focus:border-[#2a6aaa]"
-              >
-                {PRIORITY_OPTIONS.map((p) => (
-                  <option key={p}>{p}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-normal uppercase tracking-wide text-[#90bce0]">
-                Assign to QA *
-              </label>
-              <select
-                value={form.assignedQa}
-                onChange={(e) => update("assignedQa", e.target.value)}
-                className="w-full rounded-md border border-[#1a3a6e]/50 bg-[#060f26] px-3 py-2.5 text-sm text-[#ddeeff] outline-none focus:border-[#2a6aaa]"
-              >
-                {QA_OPTIONS.map((q) => (
-                  <option key={q}>{q}</option>
-                ))}
-              </select>
-            </div>
+          <div>
+            <label className="mb-1 block text-xs font-normal uppercase tracking-wide text-[#1d4ed8]">
+              Priority *
+            </label>
+            <select
+              value={form.priority}
+              onChange={(e) => update("priority", e.target.value)}
+              className="w-full rounded-md border border-[#bfdbfe]/50 bg-[#ffffff] px-3 py-2.5 text-sm text-[#0f172a] outline-none focus:border-[#93c5fd]"
+            >
+              {PRIORITY_OPTIONS.map((p) => (
+                <option key={p}>{p}</option>
+              ))}
+            </select>
           </div>
 
           <div>
-            <label className="mb-1 block text-xs font-normal uppercase tracking-wide text-[#90bce0]">
+            <label className="mb-1 block text-xs font-normal uppercase tracking-wide text-[#1d4ed8]">
               Specifications
             </label>
             <textarea
@@ -192,22 +175,22 @@ const emptyForm = {
               onChange={(e) => update("specifications", e.target.value)}
               placeholder="Capacity, wattage, key specs..."
               rows={3}
-              className="w-full rounded-md border border-[#1a3a6e]/50 bg-[#060f26] px-3 py-2.5 text-sm text-[#ddeeff] outline-none focus:border-[#2a6aaa]"
+              className="w-full rounded-md border border-[#bfdbfe]/50 bg-[#ffffff] px-3 py-2.5 text-sm text-[#0f172a] outline-none focus:border-[#93c5fd]"
             />
           </div>
 
-          <div className="rounded-md bg-[#0a1e42] p-4">
+          <div className="rounded-md bg-[#eff6ff] p-4">
             <div className="flex items-center justify-between">
-              <label className="text-sm font-medium text-[#ddeeff]">Sample received?</label>
+              <label className="text-sm font-medium text-[#0f172a]">Sample received?</label>
               <button
                 type="button"
                 onClick={() => update("sampleReceived", !form.sampleReceived)}
                 className={`relative h-6 w-11 rounded-full transition ${
-                  form.sampleReceived ? "bg-[#1a6a4a]" : "bg-[#d9cfba]"
+                  form.sampleReceived ? "bg-[#16a34a]" : "bg-[#e2e8f0]"
                 }`}
               >
                 <span
-                  className={`absolute top-0.5 h-5 w-5 rounded-full bg-[#060f26] transition ${
+                  className={`absolute top-0.5 h-5 w-5 rounded-full bg-[#ffffff] transition ${
                     form.sampleReceived ? "left-5" : "left-0.5"
                   }`}
                 />
@@ -215,21 +198,21 @@ const emptyForm = {
             </div>
             {form.sampleReceived && (
               <div className="mt-3">
-                <label className="mb-1 block text-xs font-normal uppercase tracking-wide text-[#90bce0]">
+                <label className="mb-1 block text-xs font-normal uppercase tracking-wide text-[#1d4ed8]">
                   Date given to QA team
                 </label>
                 <input
                   type="date"
                   value={form.sampleGivenDate}
                   onChange={(e) => update("sampleGivenDate", e.target.value)}
-                  className="w-full rounded-md border border-[#1a3a6e]/50 bg-[#060f26] px-3 py-2.5 text-sm text-[#ddeeff] outline-none focus:border-[#2a6aaa]"
+                  className="w-full rounded-md border border-[#bfdbfe]/50 bg-[#ffffff] px-3 py-2.5 text-sm text-[#0f172a] outline-none focus:border-[#93c5fd]"
                 />
               </div>
             )}
           </div>
 
           <div>
-            <label className="mb-1 block text-xs font-normal uppercase tracking-wide text-[#90bce0]">
+            <label className="mb-1 block text-xs font-normal uppercase tracking-wide text-[#1d4ed8]">
               Deadline *
             </label>
             <input
@@ -237,12 +220,12 @@ const emptyForm = {
               type="date"
               value={form.deadline}
               onChange={(e) => update("deadline", e.target.value)}
-              className="w-full rounded-md border border-[#1a3a6e]/50 bg-[#060f26] px-3 py-2.5 text-sm text-[#ddeeff] outline-none focus:border-[#2a6aaa]"
+              className="w-full rounded-md border border-[#bfdbfe]/50 bg-[#ffffff] px-3 py-2.5 text-sm text-[#0f172a] outline-none focus:border-[#93c5fd]"
             />
           </div>
 
           <div>
-            <label className="mb-1 block text-xs font-normal uppercase tracking-wide text-[#90bce0]">
+            <label className="mb-1 block text-xs font-normal uppercase tracking-wide text-[#1d4ed8]">
               Product image
             </label>
             <input
@@ -265,7 +248,7 @@ const emptyForm = {
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="relative w-full overflow-hidden rounded-md border-2 border-dashed border-[#1a3a6e]/50 bg-[#060f26] text-sm text-[#90bce0] hover:bg-[#0a1e42]"
+              className="relative w-full overflow-hidden rounded-md border-2 border-dashed border-[#bfdbfe]/50 bg-[#ffffff] text-sm text-[#1d4ed8] hover:bg-[#eff6ff]"
             >
               {imageDataUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -283,13 +266,13 @@ const emptyForm = {
             <button
               type="button"
               onClick={() => setAddOpen(false)}
-              className="flex-1 rounded-md border border-[#1a3a6e]/50 bg-[#060f26] py-2.5 text-sm font-medium text-[#90bce0] hover:bg-[#0a1e42]"
+              className="flex-1 rounded-md border border-[#bfdbfe]/50 bg-[#ffffff] py-2.5 text-sm font-medium text-[#1d4ed8] hover:bg-[#eff6ff]"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="flex-1 rounded-md bg-[#3b2f23] py-2.5 text-sm font-medium text-[#ddeeff] hover:opacity-90"
+              className="flex-1 rounded-md bg-blue-600 py-2.5 text-sm font-medium text-white hover:bg-blue-700"
             >
               Add to Intake
             </button>
