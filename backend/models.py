@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Date, ForeignKey, Text, Boolean
+from sqlalchemy import Column, Integer, String, DateTime, Date, ForeignKey, Text, Boolean, JSON
 from datetime import datetime, timedelta
 from database import Base
 
@@ -33,15 +33,22 @@ class Product(Base):
     assigned_qa = Column(String)
     priority = Column(String, default="Medium")    # Low | Medium | High | Urgent
     status = Column(String, default="Pending NPD") # Pending NPD | Pending Decision | Approved | On hold | Rejected
-    deadline = Column(Date, nullable=False)
+    deadline = Column(Date, nullable=True)
     specifications = Column(Text)
     sample_received = Column(Boolean, default=False)
     sample_given_date = Column(Date)
-    image_url = Column(String)                     # stored as S3/file URL, not base64
+    image_url = Column(String)
+    verdict_remarks = Column(Text)                 # QA verdict remarks
+    urbn_model_no = Column(String)                 # URBN internal model number
+    factory_sku = Column(String)                   # Factory's own SKU
+    colors = Column(JSON)                          # list of color strings
     status_changed_at = Column(DateTime)
-    rejected_by = Column(String)                   # name of person who rejected
+    rejected_by = Column(String)
+    archive_remarks = Column(Text)
     created_by = Column(Integer, ForeignKey("users.id"))
     created_at = Column(DateTime, default=datetime.utcnow)
+    version = Column(Integer, default=1, nullable=False)
+    sample_version = Column(Integer, default=1)
 
 
 class ActivityLog(Base):
@@ -51,7 +58,7 @@ class ActivityLog(Base):
     action = Column(String, nullable=False)
     note = Column(Text)
     performed_by_id = Column(Integer, ForeignKey("users.id"))
-    performed_by_name = Column(String)             # denormalised for display speed
+    performed_by_name = Column(String)
     timestamp = Column(DateTime, default=datetime.utcnow)
 
 
@@ -60,7 +67,7 @@ class NpdReport(Base):
     id = Column(Integer, primary_key=True)
     product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), unique=True)
     file_name = Column(String)
-    file_url = Column(String)                      # S3 URL — not base64 in DB
+    file_url = Column(String)
     outcome = Column(String, nullable=False)       # Pass | Not Pass
     notes = Column(Text)
     submitted_by_id = Column(Integer, ForeignKey("users.id"))
@@ -77,6 +84,20 @@ class FactoryComm(Base):
     reply_at = Column(DateTime)
     reply_text = Column(Text)
     tentative_return_date = Column(Date)
+    # Hold case workflow
+    expected_reply_date = Column(Date)
+    reply_received_at = Column(DateTime)
+    reply_summary = Column(String)                 # Fully Accepted | Decision Pending | Partially Rejected
+    reply_notes = Column(Text)
+    partial_resolved_at = Column(DateTime)
+    internal_decision = Column(String)             # Approved | Rejected | Order Placed
+    internal_decision_at = Column(DateTime)
+    internal_decision_by = Column(String)
+    internal_decision_notes = Column(Text)
+    improvement_sample_expected = Column(Boolean, default=False)
+    improvement_sample_expected_date = Column(Date)
+    improvement_sample_received_at = Column(DateTime)
+    case_log = Column(JSON, default=list)
 
 
 class FactoryCommEdit(Base):
@@ -88,12 +109,33 @@ class FactoryCommEdit(Base):
     previous_date = Column(Date)
 
 
+class OrderDecision(Base):
+    __tablename__ = "order_decisions"
+    id = Column(Integer, primary_key=True)
+    product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), unique=True)
+    state = Column(String, nullable=False)         # pending | placed | held | dropped
+    internal_code = Column(String)
+    colors = Column(JSON)                          # list of color strings
+    improvement_notes = Column(Text)
+    improved_golden_sample_expected = Column(Date)
+    decided_at = Column(DateTime, default=datetime.utcnow)
+    decided_by_id = Column(Integer, ForeignKey("users.id"))
+    decided_by_name = Column(String)
+    remarks = Column(Text)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    order_archived = Column(Boolean, default=False)
+
+
 class GoldenWorkflow(Base):
     __tablename__ = "golden_workflows"
     id = Column(Integer, primary_key=True)
     product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), unique=True)
     purchase_notified_at = Column(DateTime)
     order_confirmed_at = Column(DateTime)
+    compliance_not_needed = Column(Boolean, default=False)
+    golden_sample_archived = Column(Boolean, default=False)
+    compliance_archived = Column(Boolean, default=False)
+    packaging_archived = Column(Boolean, default=False)
 
 
 class GoldenDetails(Base):
@@ -104,35 +146,48 @@ class GoldenDetails(Base):
     sku_code = Column(String)
     colour = Column(String)
     markings = Column(String)
+    # Part 1 confirmations (all four required to unlock compliance/packaging/golden sample)
+    colour_confirmed = Column(Boolean, default=False)
+    logo_marking_confirmed = Column(Boolean, default=False)
+    rating_label_confirmed = Column(Boolean, default=False)
+    bom_confirmed = Column(Boolean, default=False)
     saved_at = Column(DateTime, default=datetime.utcnow)
 
 
 class ComplianceTrack(Base):
+    """One row per certificate per workflow. Cert names: BIS, WPC, MFI (Apple), QI"""
     __tablename__ = "compliance_tracks"
     id = Column(Integer, primary_key=True)
-    workflow_id = Column(Integer, ForeignKey("golden_workflows.id", ondelete="CASCADE"), unique=True)
-    status = Column(String, default="Pending")
-    expected_date = Column(Date)
+    workflow_id = Column(Integer, ForeignKey("golden_workflows.id", ondelete="CASCADE"), index=True)
+    name = Column(String, nullable=False)          # BIS | WPC | MFI (Apple) | QI
+    initiated_at = Column(DateTime)
+    sample_dispatched_at = Column(DateTime)
+    expected_delivery_date = Column(Date)
+    cert_received_at = Column(DateTime)
     confirmed_at = Column(DateTime)
+    improvement_notes = Column(Text)
 
 
 class PackagingTrack(Base):
     __tablename__ = "packaging_tracks"
     id = Column(Integer, primary_key=True)
     workflow_id = Column(Integer, ForeignKey("golden_workflows.id", ondelete="CASCADE"), unique=True)
+    # Step 1: Vendor selection
     vendor_name = Column(String)
     vendor_set_at = Column(DateTime)
-    sample_id_received = Column(String)
-    sample_received_at = Column(DateTime)
-    kld_at = Column(DateTime)
-    kld_image_url = Column(String)
-    kld_approved_at = Column(DateTime)
-    kld_rejected_at = Column(DateTime)
-    artwork_started_at = Column(DateTime)
-    artwork_image_url = Column(String)
-    artwork_approved_at = Column(DateTime)
-    artwork_rejected_at = Column(DateTime)
-    released_at = Column(DateTime)
+    # Step 2: Sample dispatch (version increments on rejection)
+    sample_version = Column(Integer, default=1)
+    sample_dispatched_at = Column(DateTime)
+    # Step 3: Expected dummy package date
+    expected_delivery_date = Column(Date)
+    # Step 4: Status + decision cycle
+    sample_status = Column(String)                 # Awaiting | Received
+    decision = Column(String)                      # Approved | Improvement Required
+    decision_at = Column(DateTime)
+    improvement_notes = Column(Text)
+    # KLD steps (after approval)
+    kld_acknowledged_at = Column(DateTime)
+    kld_emailed_to_designer_at = Column(DateTime)
 
 
 class GoldenSampleTrack(Base):
@@ -140,6 +195,7 @@ class GoldenSampleTrack(Base):
     id = Column(Integer, primary_key=True)
     workflow_id = Column(Integer, ForeignKey("golden_workflows.id", ondelete="CASCADE"), unique=True)
     status = Column(String, default="Not started")  # Not started | Requested | In progress | Received
+    requested_at = Column(DateTime)
     expected_date = Column(Date)
     received_at = Column(DateTime)
 

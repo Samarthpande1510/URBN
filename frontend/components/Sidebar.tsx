@@ -3,21 +3,20 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { LayoutDashboard, FlaskConical, ClipboardList, PauseCircle, CheckSquare, Award, XCircle, Bell, Archive, PackageX, LogOut, X } from "lucide-react";
+import { LayoutDashboard, FlaskConical, ClipboardList, FileCheck2, PauseCircle, Award, Bell, Archive, PackageX, LogOut, X } from "lucide-react";
 import { logout, getSession } from "@/lib/auth";
 import type { Role, Session } from "@/lib/auth";
 import { useProducts } from "@/lib/products-context";
 import { useEffect, useState } from "react";
 
 const LINKS = [
-  { href: "/dashboard",         label: "Dashboard",        icon: LayoutDashboard },
-  { href: "/npd-testing",       label: "NPD Testing",      icon: FlaskConical },
-  { href: "/decision-pending",  label: "Decision Pending", icon: ClipboardList },
-  { href: "/on-hold",           label: "On Hold",          icon: PauseCircle },
-  { href: "/approved",          label: "Approved",         icon: CheckSquare },
-  { href: "/golden-product",    label: "Golden Sample",    icon: Award },
-  { href: "/rejected",          label: "Rejected",         icon: XCircle },
-  { href: "/notifications",     label: "Notifications",    icon: Bell },
+  { href: "/dashboard",          label: "Dashboard",          icon: LayoutDashboard },
+  { href: "/npd-testing",        label: "NPD Testing",        icon: FlaskConical },
+  { href: "/decision-pending",   label: "Decision Pending",   icon: ClipboardList },
+  { href: "/order-confirmation", label: "Order Confirmation", icon: FileCheck2 },
+  { href: "/hold-insights",      label: "Hold",                icon: PauseCircle },
+  { href: "/golden-product",     label: "Golden Sample",      icon: Award },
+  { href: "/notifications",      label: "Notifications",      icon: Bell },
 ];
 
 export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {

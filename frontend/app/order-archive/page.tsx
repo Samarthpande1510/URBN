@@ -1,21 +1,21 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { useProducts, ProductRow, ColorOrder } from "@/lib/products-context";
 import { PRIORITY_DOT } from "@/lib/colors";
 import { Chip } from "@/components/Chip";
-import { getSession, Session } from "@/lib/auth";
 import { useToast } from "@/components/Toast";
-import { CheckCircle, Plus, X } from "lucide-react";
+import { api, apiErrorMessage } from "@/lib/api";
+import { CheckCircle, Plus, X, Archive } from "lucide-react";
 
 function fmt(v: string | null) {
   if (!v) return null;
   return new Date(v).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
-function OrderForm({ p, session, onDone }: { p: ProductRow; session: Session; onDone: () => void }) {
-  const { setProducts, addNotification } = useProducts();
+function OrderForm({ p, onDone }: { p: ProductRow; onDone: () => void }) {
+  const { addNotification, refreshProducts } = useProducts();
   const { showToast } = useToast();
   const [colors, setColors] = useState<ColorOrder[]>([{ color: "", quantity: 0 }]);
 
@@ -27,27 +27,18 @@ function OrderForm({ p, session, onDone }: { p: ProductRow; session: Session; on
 
   const canPlace = colors.length > 0 && colors.every((c) => c.color.trim() && c.quantity > 0);
 
-  function placeOrder() {
+  async function placeOrder() {
     if (!canPlace) return;
-    const now = new Date().toISOString();
     const od = p.orderDecision!;
-    setProducts((prev) => prev.map((x) => x.id !== p.id ? x : {
-      ...x,
-      orderDecision: { ...od, state: "placed", decidedAt: now, decidedBy: session.name, colors },
-      goldenWorkflow: {
-        purchaseNotifiedAt: null, orderConfirmedAt: null, purchaseLog: [],
-        details: null, compliance: null, packaging: null, goldenSample: null,
-        improvedGoldenSampleExpected: od.improvedGoldenSampleExpected,
-      },
-      activityLog: [...x.activityLog, {
-        action: `Order placed (from archive) by ${session.name} — ${colors.map((c) => `${c.color} ×${c.quantity}`).join(", ")}`,
-        timestamp: now,
-        stages: ["ORDER PLACED", "GOLDEN SAMPLES PENDING"],
-      }],
-    }));
-    addNotification({ targetRoles: ["CEO", "Dev", "Sales", "QA"], productId: p.id, productName: p.codeName, message: `Order placed for ${p.codeName} (${od.internalCode}) — moving to Golden Sample.` });
-    showToast("Order placed — moved to Golden Sample");
-    onDone();
+    try {
+      await api.products.patchOrderDecision(p.id, { state: "placed", internal_code: od.internalCode, colors }, p.version);
+      await api.golden.notifyPurchase(p.id, p.version + 1);
+      await api.golden.confirmOrder(p.id, p.version + 2);
+      await refreshProducts();
+      addNotification({ targetRoles: ["CEO", "Dev", "Sales", "QA"], productId: p.id, productName: p.codeName, message: `Order placed for ${p.codeName} (${od.internalCode}) — moving to Golden Sample.` });
+      showToast("Order placed — moved to Golden Sample");
+      onDone();
+    } catch (e: unknown) { const { message, isConflict } = apiErrorMessage(e); if (isConflict) await refreshProducts(); showToast(isConflict ? message : `Error: ${message}`); }
   }
 
   return (
@@ -95,14 +86,22 @@ function OrderForm({ p, session, onDone }: { p: ProductRow; session: Session; on
 }
 
 export default function OrderArchivePage() {
-  const { products } = useProducts();
-  const [session, setSession] = useState<Session | null>(null);
+  const { products, refreshProducts } = useProducts();
+  const { showToast } = useToast();
   const [orderingId, setOrderingId] = useState<number | null>(null);
-  useEffect(() => { setSession(getSession()); }, []);
 
-  const canOrder = session?.role === "CEO" || session?.role === "Sales";
+  const canOrder = true;
 
-  const dropped = products.filter((p) => p.status === "Approved" && p.orderDecision?.state === "dropped");
+  const dropped = products.filter((p) => p.status === "Approved" && p.orderDecision?.state === "dropped" && !p.orderDecision?.orderArchived);
+
+  async function archiveOrder(id: number) {
+    try {
+      const p = products.find((x) => x.id === id);
+      await api.orders.archiveOrder(id, p?.version);
+      await refreshProducts();
+      showToast("Order archived");
+    } catch (e: unknown) { const { message, isConflict } = apiErrorMessage(e); if (isConflict) await refreshProducts(); showToast(isConflict ? message : `Error: ${message}`); }
+  }
 
   return (
     <AppShell>
@@ -141,19 +140,25 @@ export default function OrderArchivePage() {
                 </div>
 
                 {canOrder && !isOrdering && (
-                  <div className="border-t border-[#bfdbfe]/20 px-5 py-3">
+                  <div className="border-t border-[#bfdbfe]/20 px-5 py-3 flex items-center gap-3">
                     <button
                       onClick={() => setOrderingId(p.id)}
                       className="flex items-center gap-1.5 rounded-md border border-green-500/30 bg-green-500/10 px-4 py-2 text-xs font-semibold text-green-400 hover:bg-green-500/20 transition"
                     >
                       <CheckCircle size={13} /> Place order
                     </button>
+                    <button
+                      onClick={() => archiveOrder(p.id)}
+                      className="flex items-center gap-1.5 rounded-md border border-dashed border-[#94a3b8]/50 px-3 py-2 text-xs text-[#94a3b8] hover:border-red-300/60 hover:text-red-400 transition"
+                    >
+                      <Archive size={12} /> Archive
+                    </button>
                   </div>
                 )}
 
-                {isOrdering && session && (
+                {isOrdering && (
                   <div className="border-t border-[#bfdbfe]/30 px-5 py-3">
-                    <OrderForm p={p} session={session} onDone={() => setOrderingId(null)} />
+                    <OrderForm p={p} onDone={() => setOrderingId(null)} />
                   </div>
                 )}
               </div>

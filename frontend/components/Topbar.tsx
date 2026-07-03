@@ -113,7 +113,7 @@ const emptyForm = {
         <form onSubmit={handleSubmit} className="mt-5 space-y-5">
           <div>
             <label className="mb-1 block text-xs font-normal uppercase tracking-wide text-[#1d4ed8]">
-              Product name *
+              Product Name *
             </label>
             <input
               required
@@ -127,10 +127,9 @@ const emptyForm = {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-xs font-normal uppercase tracking-wide text-[#1d4ed8]">
-                Factory *
+                Factory Name
               </label>
               <input
-                required
                 value={form.factory}
                 onChange={(e) => update("factory", e.target.value)}
                 placeholder="e.g. Shenzhen PowerTech"
@@ -139,10 +138,9 @@ const emptyForm = {
             </div>
             <div>
               <label className="mb-1 block text-xs font-normal uppercase tracking-wide text-[#1d4ed8]">
-                Factory SKU *
+                Factory SKU
               </label>
               <input
-                required
                 value={form.factorySku}
                 onChange={(e) => update("factorySku", e.target.value)}
                 placeholder="e.g. UPR136"
@@ -153,7 +151,7 @@ const emptyForm = {
 
           <div>
             <label className="mb-1 block text-xs font-normal uppercase tracking-wide text-[#1d4ed8]">
-              Priority *
+              Priority 
             </label>
             <select
               value={form.priority}
@@ -179,44 +177,11 @@ const emptyForm = {
             />
           </div>
 
-          <div className="rounded-md bg-[#eff6ff] p-4">
-            <div className="flex items-center justify-between">
-              <label className="text-sm font-medium text-[#0f172a]">Sample received?</label>
-              <button
-                type="button"
-                onClick={() => update("sampleReceived", !form.sampleReceived)}
-                className={`relative h-6 w-11 rounded-full transition ${
-                  form.sampleReceived ? "bg-[#16a34a]" : "bg-[#e2e8f0]"
-                }`}
-              >
-                <span
-                  className={`absolute top-0.5 h-5 w-5 rounded-full bg-[#ffffff] transition ${
-                    form.sampleReceived ? "left-5" : "left-0.5"
-                  }`}
-                />
-              </button>
-            </div>
-            {form.sampleReceived && (
-              <div className="mt-3">
-                <label className="mb-1 block text-xs font-normal uppercase tracking-wide text-[#1d4ed8]">
-                  Date given to QA team
-                </label>
-                <input
-                  type="date"
-                  value={form.sampleGivenDate}
-                  onChange={(e) => update("sampleGivenDate", e.target.value)}
-                  className="w-full rounded-md border border-[#bfdbfe]/50 bg-[#ffffff] px-3 py-2.5 text-sm text-[#0f172a] outline-none focus:border-[#93c5fd]"
-                />
-              </div>
-            )}
-          </div>
-
           <div>
             <label className="mb-1 block text-xs font-normal uppercase tracking-wide text-[#1d4ed8]">
-              Deadline *
+              Deadline
             </label>
             <input
-              required
               type="date"
               value={form.deadline}
               onChange={(e) => update("deadline", e.target.value)}
@@ -226,7 +191,7 @@ const emptyForm = {
 
           <div>
             <label className="mb-1 block text-xs font-normal uppercase tracking-wide text-[#1d4ed8]">
-              Product image
+              Product Image
             </label>
             <input
               ref={fileInputRef}
@@ -235,6 +200,11 @@ const emptyForm = {
               className="hidden"
               onChange={(e) => {
                 const file = e.target.files?.[0] ?? null;
+                if (file && file.size > 2 * 1024 * 1024) {
+                  alert("Image too large — max 2MB");
+                  e.target.value = "";
+                  return;
+                }
                 setImageName(file?.name ?? null);
                 if (file) {
                   const reader = new FileReader();
@@ -263,6 +233,13 @@ const emptyForm = {
           </div>
 
           <div className="flex gap-3 pt-2">
+            <button
+              type="button"
+              onClick={() => { setForm(emptyForm); setImageName(null); setImageDataUrl(null); }}
+              className="rounded-md border border-[#bfdbfe]/50 bg-[#ffffff] px-4 py-2.5 text-sm font-medium text-[#64748b] hover:bg-[#eff6ff]"
+            >
+              Clear
+            </button>
             <button
               type="button"
               onClick={() => setAddOpen(false)}

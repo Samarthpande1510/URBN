@@ -7,6 +7,7 @@ export const STATUS_DOT: Record<Status, string> = {
   "On hold":         "#a5b4fc",  // indigo-300 — paused
   Rejected:          "#94a3b8",  // slate-400  — inactive
   Archived:          "#cbd5e1",  // slate-300  — closed
+  Removed:           "#fca5a5",  // red-300    — removed from pipeline
 };
 
 export const PRIORITY_DOT: Record<Priority, string> = {

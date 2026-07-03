@@ -1,9 +1,10 @@
 "use client";
 
-import { createContext, useContext, useState, ReactNode, Dispatch, SetStateAction } from "react";
+import { createContext, useContext, useState, useEffect, ReactNode, Dispatch, SetStateAction, useCallback } from "react";
 import type { Role } from "./auth";
+import { api } from "./api";
 
-export type Status = "Pending NPD" | "Pending Decision" | "Approved" | "On hold" | "Rejected" | "Archived";
+export type Status = "Pending NPD" | "Pending Decision" | "Approved" | "On hold" | "Rejected" | "Archived" | "Removed";
 
 export interface RejectionComment {
   by: string;
@@ -26,13 +27,31 @@ export interface OrderDecision {
   colors: ColorOrder[];
   improvedGoldenSampleExpected?: boolean;
   improvementNotes?: string;
+  remarks?: string;
+  orderArchived?: boolean;
 }
 
 export interface ActivityEntry {
   action: string;
   timestamp: string;
   note?: string;
-  stages?: string[]; // Excel-style pipeline stage labels for this transition
+  stages?: string[];
+}
+
+export type HoldStatus =
+  | "Feedback Shared"
+  | "Factory Replied (Product on hold)"
+  | "Factory Replied (Awaiting Sample)"
+  | "Factory Replied (Product Rejected)"
+  | "Factory Replied (Pending Points)";
+
+export type FactoryReplySummary = "Fully Accepted" | "Decision Pending" | "Partially Rejected";
+export type InternalDecision = "Approved" | "Rejected" | "Order Placed";
+
+export interface HoldCaseEntry {
+  stage: string;
+  note?: string;
+  timestamp: string;
 }
 
 export interface FactoryComm {
@@ -43,6 +62,23 @@ export interface FactoryComm {
   replyText: string | null;
   tentativeReturnDate: string | null;
   editHistory: { editedAt: string; previousReply: string | null; previousDate: string | null }[];
+  sentObservations?: string;
+  holdStatusLog?: { status: HoldStatus; timestamp: string }[];
+  factorySampleReceived?: boolean;
+  factorySampleDate?: string | null;
+  expectedReplyDate?: string | null;
+  replyReceivedAt?: string | null;
+  replySummary?: FactoryReplySummary | null;
+  replyNotes?: string | null;
+  partialResolvedAt?: string | null;
+  internalDecision?: InternalDecision | null;
+  internalDecisionAt?: string | null;
+  internalDecisionBy?: string | null;
+  internalDecisionNotes?: string | null;
+  caseLog?: HoldCaseEntry[];
+  reminderSentForDate?: string | null;
+  improvementSampleExpected?: boolean;
+  improvementSampleReceivedAt?: string | null;
 }
 
 export interface ApprovedWorkflow {
@@ -58,56 +94,71 @@ export interface ApprovedWorkflow {
 
 export type GoldenSampleStatus = "Not started" | "Requested" | "In progress" | "Received";
 
+export type ComplianceCertName = "BIS" | "WPC" | "MFI (Apple)" | "QI";
+
+export interface ComplianceTrack {
+  name: ComplianceCertName;
+  initiatedAt: string;
+  sampleDispatchedAt: string | null;
+  expectedDeliveryDate: string;
+  status: string;
+  certReceivedAt?: string | null;
+  confirmedAt: string | null;
+  log: ActivityEntry[];
+}
+
 export interface GoldenWorkflow {
-  // Stage 1 — purchase
   purchaseNotifiedAt: string | null;
   orderConfirmedAt: string | null;
   purchaseLog: ActivityEntry[];
 
-  // Stage 2 — product details (unlocked after order confirmed)
   details: {
     productName: string;
     skuCode: string;
-    colour: string;
-    logoMarking: string;
-    ratingLabel: string;
+    colourConfirmedAt: string | null;
+    logoMarkingConfirmedAt: string | null;
+    ratingLabelConfirmedAt: string | null;
     bomConfirmedAt: string | null;
     savedAt: string;
   } | null;
 
-  // Stage 3 — three parallel tracks (unlocked after details saved)
   compliance: {
-    status: string;
-    expectedDate: string;
-    confirmedAt: string | null;
-    log: ActivityEntry[];
+    tracks: ComplianceTrack[];
   } | null;
+
+  complianceArchived?: boolean;
 
   packaging: {
     vendorName: string;
     vendorSetAt: string | null;
-    expectedDate: string | null;
-    sampleIdReceived: string;
-    sampleReceivedAt: string | null;
-    keyLineDrawingAt: string | null;
-    keyLineDrawingImageUrl: string | null;
-    keyLineDrawingApprovedAt: string | null;
-    keyLineDrawingRejectedAt: string | null;
-    artworkStartedAt: string | null;
-    artworkImageUrl: string | null;
-    artworkApprovedAt: string | null;
-    artworkRejectedAt: string | null;
-    releasedAt: string | null;
+    sampleVersion: number;
+    sampleDispatchedAt: string | null;
+    sampleStatus: "Awaiting" | "Received" | null;
+    sampleReceivedAt?: string | null;
+    expectedDeliveryDate: string;
+    decision: "Approved" | "Improvement Required" | null;
+    decisionAt: string | null;
+    improvementNotes: string | null;
+    kldAcknowledgedAt: string | null;
+    kldEmailedToDesignerAt: string | null;
     log: ActivityEntry[];
   } | null;
 
   goldenSample: {
     status: GoldenSampleStatus;
+    requestedAt?: string | null;
     expectedDate: string;
     receivedAt: string | null;
+    approvedAt: string | null;
+    improvementFixed: boolean | null;
+    improvementFixedAt: string | null;
+    improvementFixedNotes: string | null;
     log: ActivityEntry[];
   } | null;
   improvedGoldenSampleExpected?: boolean;
+  goldenSampleArchived?: boolean;
+  complianceNotNeeded?: boolean;
+  packagingArchived?: boolean;
 }
 
 export interface NpdReport {
@@ -120,9 +171,10 @@ export interface NpdReport {
 
 export interface ProductRow {
   id: number;
+  version: number;
   codeName: string;
-  skuCode: string;           // Supplier / factory model number
-  urbnModelNo?: string;      // URBN internal model number — assigned at Golden Product stage
+  skuCode: string;
+  urbnModelNo?: string;
   colors?: string;
   priority: Priority;
   status: Status;
@@ -134,9 +186,13 @@ export interface ProductRow {
   imageName?: string | null;
   imageDataUrl?: string | null;
   statusChangedAt?: string;
+  sampleVersion?: number;
+  verdictRemarks?: string;
   rejectedBy?: string;
+  archiveRemarks?: string;
   rejectionComments?: RejectionComment[];
   npdReport?: NpdReport;
+  npdReports?: Array<{ version: number } & NpdReport>;
   factoryComm?: FactoryComm;
   approvedWorkflow?: ApprovedWorkflow;
   orderDecision?: OrderDecision;
@@ -158,33 +214,158 @@ export interface NewProductInput {
   imageDataUrl: string | null;
 }
 
-const initialProducts: ProductRow[] = [
-  { id: 1,  codeName: "SMPL-001", skuCode: "", urbnModelNo: undefined, colors: undefined, priority: "Medium", status: "Pending NPD", deadline: "2026-09-21", imageDataUrl: "/app-bg2.png", activityLog: [{ action: "Product added", stages: ["NPD TESTING: PENDING"], timestamp: "2026-06-23T09:00:00" }] },
-  { id: 2,  codeName: "SMPL-002", skuCode: "", urbnModelNo: undefined, colors: undefined, priority: "Medium", status: "Pending NPD", deadline: "2026-09-21", imageDataUrl: "/app-bg2.png", activityLog: [{ action: "Product added", stages: ["NPD TESTING: PENDING"], timestamp: "2026-06-23T09:00:00" }] },
-  { id: 3,  codeName: "SMPL-003", skuCode: "", urbnModelNo: undefined, colors: undefined, priority: "Medium", status: "Pending NPD", deadline: "2026-09-21", imageDataUrl: "/app-bg2.png", activityLog: [{ action: "Product added", stages: ["NPD TESTING: PENDING"], timestamp: "2026-06-23T09:00:00" }] },
-  { id: 4,  codeName: "SMPL-004", skuCode: "", urbnModelNo: undefined, colors: undefined, priority: "High",   status: "Pending NPD", deadline: "2026-08-21", imageDataUrl: "/app-bg2.png", activityLog: [{ action: "Product added", stages: ["NPD TESTING: PENDING"], timestamp: "2026-06-22T09:00:00" }] },
-  { id: 5,  codeName: "SMPL-005", skuCode: "", urbnModelNo: undefined, colors: undefined, priority: "High",   status: "Pending NPD", deadline: "2026-08-18", imageDataUrl: "/app-bg2.png", activityLog: [{ action: "Product added", stages: ["NPD TESTING: PENDING"], timestamp: "2026-06-19T09:00:00" }] },
-  { id: 6,  codeName: "SMPL-006", skuCode: "", urbnModelNo: undefined, colors: undefined, priority: "Medium", status: "Pending NPD", deadline: "2026-08-18", imageDataUrl: "/app-bg2.png", activityLog: [{ action: "Product added", stages: ["NPD TESTING: PENDING"], timestamp: "2026-06-19T09:00:00" }] },
-  { id: 7,  codeName: "SMPL-007", skuCode: "", urbnModelNo: undefined, colors: undefined, priority: "Urgent", status: "Pending NPD", deadline: "2026-07-19", imageDataUrl: "/app-bg2.png", activityLog: [{ action: "Product added", stages: ["NPD TESTING: PENDING"], timestamp: "2026-05-20T09:00:00" }] },
-  { id: 8,  codeName: "SMPL-008", skuCode: "", urbnModelNo: undefined, colors: undefined, priority: "Urgent", status: "Pending NPD", deadline: "2026-07-19", imageDataUrl: "/app-bg2.png", activityLog: [{ action: "Product added", stages: ["NPD TESTING: PENDING"], timestamp: "2026-05-20T09:00:00" }] },
-  { id: 9,  codeName: "SMPL-009", skuCode: "", urbnModelNo: undefined, colors: undefined, priority: "High",   status: "Pending NPD", deadline: "2026-07-19", imageDataUrl: "/app-bg2.png", activityLog: [{ action: "Product added", stages: ["NPD TESTING: PENDING"], timestamp: "2026-05-20T09:00:00" }] },
-  { id: 10, codeName: "SMPL-010", skuCode: "", urbnModelNo: undefined, colors: undefined, priority: "High",   status: "Pending NPD", deadline: "2026-07-18", imageDataUrl: "/app-bg2.png", activityLog: [{ action: "Product added", stages: ["NPD TESTING: PENDING"], timestamp: "2026-05-19T09:00:00" }] },
-  { id: 11, codeName: "SMPL-011", skuCode: "", urbnModelNo: undefined, colors: undefined, priority: "High",   status: "Pending NPD", deadline: "2026-08-16", imageDataUrl: "/app-bg2.png", activityLog: [{ action: "Product added", stages: ["NPD TESTING: PENDING"], timestamp: "2026-06-17T09:00:00" }] },
-  { id: 12, codeName: "SMPL-012", skuCode: "", urbnModelNo: undefined, colors: undefined, priority: "Medium", status: "Pending NPD", deadline: "2026-08-05", imageDataUrl: "/app-bg2.png", activityLog: [{ action: "Product added", stages: ["NPD TESTING: PENDING"], timestamp: "2026-06-06T09:00:00" }] },
-  { id: 13, codeName: "SMPL-013", skuCode: "", urbnModelNo: undefined, colors: undefined, priority: "Medium", status: "Pending NPD", deadline: "2026-08-15", imageDataUrl: "/app-bg2.png", activityLog: [{ action: "Product added", stages: ["NPD TESTING: PENDING"], timestamp: "2026-06-16T09:00:00" }] },
-  { id: 14, codeName: "SMPL-014", skuCode: "", urbnModelNo: undefined, colors: undefined, priority: "Medium", status: "Pending NPD", deadline: "2026-08-15", imageDataUrl: "/app-bg2.png", activityLog: [{ action: "Product added", stages: ["NPD TESTING: PENDING"], timestamp: "2026-06-16T09:00:00" }] },
-  { id: 15, codeName: "SMPL-015", skuCode: "", urbnModelNo: undefined, colors: undefined, priority: "High",   status: "Pending NPD", deadline: "2026-08-19", imageDataUrl: "/app-bg2.png", activityLog: [{ action: "Product added", stages: ["NPD TESTING: PENDING"], timestamp: "2026-06-20T09:00:00" }] },
-  { id: 16, codeName: "SMPL-016", skuCode: "", urbnModelNo: undefined, colors: undefined, priority: "Medium", status: "Pending NPD", deadline: "2026-08-21", imageDataUrl: "/app-bg2.png", activityLog: [{ action: "Product added", stages: ["NPD TESTING: PENDING"], timestamp: "2026-06-22T09:00:00" }] },
-  { id: 17, codeName: "SMPL-017", skuCode: "", urbnModelNo: undefined, colors: undefined, priority: "High",   status: "Pending NPD", deadline: "2026-08-05", imageDataUrl: "/app-bg2.png", activityLog: [{ action: "Product added", stages: ["NPD TESTING: PENDING"], timestamp: "2026-06-06T09:00:00" }] },
-  { id: 18, codeName: "SMPL-018", skuCode: "", urbnModelNo: undefined, colors: undefined, priority: "High",   status: "Pending NPD", deadline: "2026-08-04", imageDataUrl: "/app-bg2.png", activityLog: [{ action: "Product added", stages: ["NPD TESTING: PENDING"], timestamp: "2026-06-05T09:00:00" }] },
-];
-
 function mapPriority(label: string): Priority {
   if (label === "Urgent") return "Urgent";
-  if (label.startsWith("P1")) return "High";
-  if (label.startsWith("P2")) return "Medium";
-  if (label.startsWith("P3")) return "Low";
-  return "Low";
+  if (label === "High" || label.startsWith("P1")) return "High";
+  if (label === "Medium" || label.startsWith("P2")) return "Medium";
+  if (label === "Low" || label.startsWith("P3")) return "Low";
+  return "Medium";
+}
+
+export function mapProductFromApi(raw: Record<string, unknown>): ProductRow {
+  const od = raw.order_decision as Record<string, unknown> | null;
+  const gw = raw.golden_workflow as Record<string, unknown> | null;
+  const npd = raw.npd_report as Record<string, unknown> | null;
+  const fc = raw.factory_comm as Record<string, unknown> | null;
+  const colorsRaw = raw.colors;
+  const colorsStr = Array.isArray(colorsRaw) ? colorsRaw.join(", ") : typeof colorsRaw === "string" ? colorsRaw : undefined;
+
+  return {
+    id: raw.id as number,
+    version: (raw.version as number) ?? 1,
+    codeName: raw.code_name as string,
+    skuCode: raw.sku_code as string,
+    urbnModelNo: raw.urbn_model_no as string | undefined,
+    colors: colorsStr,
+    priority: (raw.priority as Priority) ?? "Medium",
+    status: (raw.status as Status) ?? "Pending NPD",
+    deadline: raw.deadline as string,
+    factory: raw.factory as string | undefined,
+    specifications: raw.specifications as string | undefined,
+    sampleReceived: (raw.sample_received as boolean) ?? false,
+    sampleGivenDate: raw.sample_given_date as string | undefined,
+    imageDataUrl: (raw.image_url as string | null) ?? null,
+    statusChangedAt: raw.status_changed_at as string | undefined,
+    sampleVersion: (raw.sample_version as number | undefined) ?? 1,
+    verdictRemarks: raw.verdict_remarks as string | undefined,
+    rejectedBy: raw.rejected_by as string | undefined,
+    archiveRemarks: raw.archive_remarks as string | undefined,
+    factoryComm: fc ? {
+      decidedAction: fc.decided_action as FactoryAction,
+      decidedAt: fc.decided_at as string | null,
+      acknowledgedAt: fc.acknowledged_at as string | null,
+      replyAt: fc.reply_at as string | null,
+      replyText: fc.reply_text as string | null,
+      tentativeReturnDate: fc.tentative_return_date as string | null,
+      editHistory: [],
+      expectedReplyDate: fc.expected_reply_date as string | null,
+      replyReceivedAt: fc.reply_received_at as string | null,
+      replySummary: fc.reply_summary as FactoryReplySummary | null,
+      replyNotes: fc.reply_notes as string | null,
+      partialResolvedAt: fc.partial_resolved_at as string | null,
+      internalDecision: fc.internal_decision as InternalDecision | null,
+      internalDecisionAt: fc.internal_decision_at as string | null,
+      internalDecisionBy: fc.internal_decision_by as string | null,
+      internalDecisionNotes: fc.internal_decision_notes as string | null,
+      improvementSampleExpected: (fc.improvement_sample_expected as boolean) ?? false,
+      improvementSampleReceivedAt: fc.improvement_sample_received_at as string | null,
+      caseLog: (fc.case_log as HoldCaseEntry[]) ?? [],
+    } : undefined,
+    npdReport: npd ? {
+      fileName: (npd.file_name as string | null) ?? null,
+      fileDataUrl: (npd.file_url as string | null) ?? null,
+      outcome: npd.outcome as "Pass" | "Not Pass",
+      notes: (npd.notes as string) ?? "",
+      submittedAt: npd.submitted_at as string,
+    } : undefined,
+    orderDecision: od ? {
+      state: od.state as "pending" | "held" | "dropped" | "placed",
+      internalCode: (od.internal_code as string) ?? "",
+      decidedAt: od.decided_at as string | null,
+      decidedBy: od.decided_by_name as string | null,
+      colors: Array.isArray(od.colors) ? (od.colors as ColorOrder[]) : [],
+      improvementNotes: od.improvement_notes as string | undefined,
+      remarks: od.remarks as string | undefined,
+      orderArchived: (od.order_archived as boolean) ?? false,
+    } : undefined,
+    goldenWorkflow: gw ? {
+      purchaseNotifiedAt: gw.purchase_notified_at as string | null,
+      orderConfirmedAt: gw.order_confirmed_at as string | null,
+      purchaseLog: [],
+      complianceNotNeeded: (gw.compliance_not_needed as boolean) ?? false,
+      goldenSampleArchived: (gw.golden_sample_archived as boolean) ?? false,
+      complianceArchived: (gw.compliance_archived as boolean) ?? false,
+      packagingArchived: (gw.packaging_archived as boolean) ?? false,
+      details: null,
+      compliance: null,
+      packaging: null,
+      goldenSample: null,
+    } : undefined,
+    activityLog: [],
+  };
+}
+
+export function mapGoldenFromApi(data: Record<string, unknown>): GoldenWorkflow {
+  const workflow = data.workflow as Record<string, unknown>;
+  const details = data.details as Record<string, unknown> | null;
+  const compliance = data.compliance as Record<string, unknown>[];
+  const packaging = data.packaging as Record<string, unknown> | null;
+  const golden_sample = data.golden_sample as Record<string, unknown> | null;
+
+  return {
+    purchaseNotifiedAt: workflow.purchase_notified_at as string | null,
+    orderConfirmedAt: workflow.order_confirmed_at as string | null,
+    purchaseLog: [],
+    complianceNotNeeded: (workflow.compliance_not_needed as boolean) ?? false,
+    goldenSampleArchived: (workflow.golden_sample_archived as boolean) ?? false,
+    complianceArchived: (workflow.compliance_archived as boolean) ?? false,
+    details: details ? {
+      productName: (details.product_name as string) ?? "",
+      skuCode: (details.sku_code as string) ?? "",
+      colourConfirmedAt: details.colour_confirmed ? (details.saved_at as string) : null,
+      logoMarkingConfirmedAt: details.logo_marking_confirmed ? (details.saved_at as string) : null,
+      ratingLabelConfirmedAt: details.rating_label_confirmed ? (details.saved_at as string) : null,
+      bomConfirmedAt: details.bom_confirmed ? (details.saved_at as string) : null,
+      savedAt: details.saved_at as string,
+    } : null,
+    compliance: compliance && compliance.length > 0 ? {
+      tracks: compliance.map((t) => ({
+        name: t.name as ComplianceCertName,
+        initiatedAt: t.initiated_at as string,
+        sampleDispatchedAt: (t.sample_dispatched_at as string | null) ?? null,
+        expectedDeliveryDate: (t.expected_delivery_date as string) ?? "",
+        status: t.confirmed_at ? "Confirmed" : t.cert_received_at ? "Received" : t.sample_dispatched_at ? "Dispatched" : "Initiated",
+        certReceivedAt: (t.cert_received_at as string | null) ?? null,
+        confirmedAt: (t.confirmed_at as string | null) ?? null,
+        log: [],
+      })),
+    } : null,
+    packaging: packaging ? {
+      vendorName: (packaging.vendor_name as string) ?? "",
+      vendorSetAt: (packaging.vendor_set_at as string | null) ?? null,
+      sampleVersion: (packaging.sample_version as number) ?? 1,
+      sampleDispatchedAt: (packaging.sample_dispatched_at as string | null) ?? null,
+      sampleStatus: (packaging.sample_status as "Awaiting" | "Received" | null) ?? null,
+      expectedDeliveryDate: (packaging.expected_delivery_date as string) ?? "",
+      decision: (packaging.decision as "Approved" | "Improvement Required" | null) ?? null,
+      decisionAt: (packaging.decision_at as string | null) ?? null,
+      improvementNotes: (packaging.improvement_notes as string | null) ?? null,
+      kldAcknowledgedAt: (packaging.kld_acknowledged_at as string | null) ?? null,
+      kldEmailedToDesignerAt: (packaging.kld_emailed_to_designer_at as string | null) ?? null,
+      log: [],
+    } : null,
+    goldenSample: golden_sample ? {
+      status: (golden_sample.status as GoldenSampleStatus) ?? "Not started",
+      requestedAt: (golden_sample.requested_at as string | null) ?? null,
+      expectedDate: (golden_sample.expected_date as string) ?? "",
+      receivedAt: (golden_sample.received_at as string | null) ?? null,
+      approvedAt: null,
+      improvementFixed: null,
+      improvementFixedAt: null,
+      improvementFixedNotes: null,
+      log: [],
+    } : null,
+  };
 }
 
 export interface AppNotification {
@@ -200,8 +381,10 @@ export interface AppNotification {
 interface ProductsContextValue {
   products: ProductRow[];
   setProducts: Dispatch<SetStateAction<ProductRow[]>>;
-  addProduct: (input: NewProductInput) => void;
+  addProduct: (input: NewProductInput) => Promise<void>;
   deleteProduct: (id: number) => void;
+  refreshProducts: () => Promise<void>;
+  refreshGolden: (productId: number) => Promise<void>;
   notifications: AppNotification[];
   addNotification: (n: Omit<AppNotification, "id" | "createdAt" | "read">) => void;
   dismissNotification: (id: string) => void;
@@ -214,9 +397,33 @@ interface ProductsContextValue {
 const ProductsContext = createContext<ProductsContextValue | null>(null);
 
 export function ProductsProvider({ children }: { children: ReactNode }) {
-  const [products, setProducts] = useState<ProductRow[]>(initialProducts);
+  const [products, setProducts] = useState<ProductRow[]>([]);
   const [search, setSearch] = useState("");
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
+
+  const refreshProducts = useCallback(async () => {
+    try {
+      const data = await api.products.list();
+      setProducts((data as Record<string, unknown>[]).map(mapProductFromApi));
+    } catch {
+      // silently fail — user might not be logged in yet
+    }
+  }, []);
+
+  const refreshGolden = useCallback(async (productId: number) => {
+    try {
+      const data = await api.golden.get(productId);
+      const gw = mapGoldenFromApi(data as Record<string, unknown>);
+      setProducts((prev) => prev.map((p) => p.id === productId ? { ...p, goldenWorkflow: gw } : p));
+    } catch {
+      // silently fail
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshProducts();
+  }, [refreshProducts]);
+
 
   function addNotification(n: Omit<AppNotification, "id" | "createdAt" | "read">) {
     setNotifications((prev) => [{ ...n, id: `${n.productId}-${Date.now()}`, createdAt: new Date().toISOString(), read: false }, ...prev]);
@@ -239,35 +446,30 @@ export function ProductsProvider({ children }: { children: ReactNode }) {
     setNotifications((prev) => prev.filter((n) => n.productId !== id));
   }
 
-  function addProduct(input: NewProductInput) {
-    setProducts((prev) => {
-      const nextId = prev.length ? Math.max(...prev.map((p) => p.id)) + 1 : 1;
-      const now = new Date().toISOString();
-      return [
-        ...prev,
-        {
-          id: nextId,
-          codeName: input.productName,
-          skuCode: input.factorySku,
-          colors: input.colors || undefined,
-          priority: mapPriority(input.priorityLabel),
-          status: "Pending NPD",
-          deadline: input.deadline,
-          factory: input.factory,
-          specifications: input.specifications,
-          sampleReceived: input.sampleReceived,
-          sampleGivenDate: input.sampleGivenDate || undefined,
-          imageName: input.imageName,
-          imageDataUrl: input.imageDataUrl,
-          statusChangedAt: now,
-          activityLog: [{ action: "Product added", stages: ["NPD TESTING: PENDING"], timestamp: now }],
-        },
-      ];
+  async function addProduct(input: NewProductInput) {
+    const colors = input.colors ? input.colors.split(",").map((c) => c.trim()).filter(Boolean) : [];
+    await api.products.create({
+      code_name: input.productName,
+      sku_code: input.factorySku,
+      factory: input.factory,
+      priority: mapPriority(input.priorityLabel),
+      deadline: input.deadline || undefined,
+      specifications: input.specifications || undefined,
+      sample_received: input.sampleReceived,
+      sample_given_date: input.sampleGivenDate || undefined,
+      colors: colors.length > 0 ? colors : undefined,
+      image_url: input.imageDataUrl || undefined,
     });
+    await refreshProducts();
   }
 
   return (
-    <ProductsContext.Provider value={{ products, setProducts, addProduct, deleteProduct, notifications, addNotification, dismissNotification, markNotificationRead, markAllNotificationsRead, search, setSearch }}>
+    <ProductsContext.Provider value={{
+      products, setProducts, addProduct, deleteProduct,
+      refreshProducts, refreshGolden,
+      notifications, addNotification, dismissNotification, markNotificationRead, markAllNotificationsRead,
+      search, setSearch,
+    }}>
       {children}
     </ProductsContext.Provider>
   );

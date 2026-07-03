@@ -3,37 +3,281 @@
 import { useState, useEffect } from "react";
 import { AppShell } from "@/components/AppShell";
 import { useProducts, Status, ProductRow } from "@/lib/products-context";
-import { PRIORITY_DOT } from "@/lib/colors";
-import { Chip } from "@/components/Chip";
+import { api, apiErrorMessage } from "@/lib/api";
+import { Modal } from "@/components/Modal";
 import { getSession, Session } from "@/lib/auth";
 import { useToast } from "@/components/Toast";
-import { ChevronDown, ChevronUp } from "lucide-react";
 import { GridBeam } from "@/components/ui/grid-beam";
+import { FileText, X } from "lucide-react";
+
+// ─── shared stage pills ─────────────────────────────────────────────────────
+
+const STAGE_PILL_STYLE: Record<string, string> = {
+  "NPD TESTING: PENDING":    "bg-[#eff6ff] text-[#64748b] border-[#bfdbfe]/60",
+  "NPD TESTING: PASS":       "bg-green-500/15 text-green-400 border-green-500/30",
+  "NPD TESTING: FAIL":       "bg-red-500/15 text-red-400 border-red-500/30",
+  "EMAILED TO FACTORY":      "bg-[#eff6ff] text-[#3b82f6] border-[#93c5fd]/40",
+  "IMPROVEMENT REQUIREMENT": "bg-amber-500/10 text-amber-400 border-amber-500/30",
+  "GOLDEN SAMPLES PENDING":  "bg-purple-500/10 text-purple-400 border-purple-500/25",
+  "REVISED SAMPLE REQUESTED":"bg-[#eff6ff] text-[#3b82f6] border-[#93c5fd]/40",
+  "REVISED SAMPLE PENDING":  "bg-amber-500/10 text-amber-400 border-amber-500/30",
+  "REVISED SAMPLE RECEIVED": "bg-[#eff6ff] text-[#0ea5e9] border-[#0ea5e9]/25",
+  "REVISED TESTING: PENDING":"bg-orange-500/10 text-orange-400 border-orange-500/25",
+  "REVISED TESTING: PASS":   "bg-green-500/15 text-green-400 border-green-500/30",
+  "REVISED TESTING: FAIL":   "bg-red-500/15 text-red-400 border-red-500/30",
+  "REJECTED":                "bg-red-500/10 text-red-400 border-red-500/25",
+};
+const DEFAULT_PILL = "bg-[#eff6ff] text-[#64748b] border-[#bfdbfe]/60";
+
+function StagePills({ stages }: { stages: string[] }) {
+  return (
+    <div className="flex flex-wrap gap-1">
+      {stages.map((s, i) => (
+        <span key={i} className={`inline-block rounded border px-1.5 py-0.5 text-[10px] font-medium leading-tight whitespace-nowrap ${STAGE_PILL_STYLE[s] ?? DEFAULT_PILL}`}>
+          {s}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function getPipelineTrail(p: ProductRow): string[] {
+  const stages: string[] = [];
+  for (const entry of p.activityLog) {
+    if (entry.stages) stages.push(...entry.stages);
+  }
+  if (stages.length === 0) stages.push("NPD TESTING: PENDING");
+  return stages;
+}
 
 function fmt(value: string | null) {
   if (!value) return null;
   return new Date(value).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
+function fmtDate(value: string | null) {
+  if (!value) return null;
+  return new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function getAddedToNpdDate(p: ProductRow): string | null {
+  return p.activityLog[0]?.timestamp ?? null;
+}
+
+// ─── NPD Report modal ────────────────────────────────────────────────────────
+
+function SingleReport({ report, version, label }: { report: { fileName: string | null; fileDataUrl: string | null; outcome: "Pass" | "Not Pass"; notes: string; submittedAt: string }; version: number; label?: string }) {
+  const isPass = report.outcome === "Pass";
+  const isPdf = report.fileName?.toLowerCase().endsWith(".pdf") ?? false;
+  return (
+    <div className="rounded-md border border-[#bfdbfe]/40 bg-[#f8faff] p-4 space-y-3">
+      <div className="flex items-center gap-2">
+        <span className="text-xs font-semibold text-[#64748b] uppercase tracking-wide">v{version} {label ?? ""} Report</span>
+        <span className={`rounded border px-2 py-0.5 text-xs font-semibold ${isPass ? "border-green-500/30 bg-green-500/10 text-green-400" : "border-red-500/30 bg-red-500/10 text-red-400"}`}>
+          {isPass ? "Pass" : "Fail"}
+        </span>
+        <span className="text-[11px] text-[#94a3b8] ml-auto">Submitted {new Date(report.submittedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
+      </div>
+      {report.notes ? (
+        <div className="rounded-md border border-[#bfdbfe]/30 bg-white px-3 py-2 text-xs text-[#0f172a] whitespace-pre-wrap leading-relaxed">{report.notes}</div>
+      ) : (
+        <p className="text-xs text-[#94a3b8]">No observations recorded.</p>
+      )}
+      {report.fileName && report.fileDataUrl && (
+        isPdf ? (
+          <iframe src={report.fileDataUrl} className="w-full rounded-md border border-[#bfdbfe]/30" style={{ height: "300px" }} title={`v${version} NPD Report`} />
+        ) : (
+          <a href={report.fileDataUrl} download={report.fileName} className="flex items-center gap-2 rounded-md border border-[#93c5fd]/40 bg-[#eff6ff] px-3 py-2 text-xs text-[#0f172a] hover:bg-[#dbeafe] transition">
+            <span className="flex-1 truncate">{report.fileName}</span>
+            <span className="text-[#1d4ed8] ml-auto">Download</span>
+          </a>
+        )
+      )}
+    </div>
+  );
+}
+
+function ReportModal({ p, onClose }: { p: ProductRow; onClose: () => void }) {
+  const [fullscreen, setFullscreen] = useState(false);
+  const report = p.npdReport;
+  if (!report) return null;
+  const isPass = report.outcome === "Pass";
+  const isPdf = report.fileName?.toLowerCase().endsWith(".pdf") ?? false;
+  const allReports = p.npdReports ?? [];
+  const hasHistory = allReports.length > 0;
+
+  if (fullscreen) {
+    return (
+      <div className="fixed inset-0 z-[60] flex flex-col bg-white">
+        {/* Fullscreen header */}
+        <div className="flex items-center justify-between border-b border-[#bfdbfe]/30 px-5 py-3 shrink-0">
+          <div>
+            <p className="font-semibold text-slate-900">{p.codeName} — NPD Report</p>
+            <p className="mt-0.5 text-xs text-[#64748b]">Submitted {fmt(report.submittedAt)}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className={`rounded border px-2 py-0.5 text-xs font-semibold ${isPass ? "border-green-500/30 bg-green-500/10 text-green-400" : "border-red-500/30 bg-red-500/10 text-red-400"}`}>
+              {isPass ? "Pass" : "Fail"}
+            </span>
+            <button onClick={() => setFullscreen(false)} title="Collapse" className="rounded border border-[#bfdbfe]/50 px-2 py-1 text-xs text-[#64748b] hover:bg-[#eff6ff] transition">
+              ⊠ Collapse
+            </button>
+            <button onClick={onClose} className="text-[#94a3b8] hover:text-[#1d4ed8] transition"><X size={18} /></button>
+          </div>
+        </div>
+
+        {/* Fullscreen body */}
+        <div className="flex flex-1 overflow-hidden">
+          {/* Left — observations */}
+          <div className="w-72 shrink-0 overflow-y-auto border-r border-[#bfdbfe]/30 px-5 py-5 space-y-4">
+            <div>
+              <p className="text-[10px] uppercase tracking-wide text-[#64748b] mb-1.5">QA Observations</p>
+              {report.notes ? (
+                <div className="rounded-md border border-[#bfdbfe]/40 bg-[#eff6ff] px-3 py-2.5 text-sm text-[#0f172a] whitespace-pre-wrap leading-relaxed">
+                  {report.notes}
+                </div>
+              ) : (
+                <p className="text-xs text-[#94a3b8]">No observations recorded.</p>
+              )}
+            </div>
+            {report.fileName && report.fileDataUrl && !isPdf && (
+              <a href={report.fileDataUrl} download={report.fileName}
+                className="flex items-center gap-3 rounded-md border border-[#93c5fd]/40 bg-[#eff6ff] px-3 py-2.5 hover:bg-[#dbeafe] transition">
+                <FileText size={16} className="text-[#3b82f6] shrink-0" />
+                <span className="text-sm text-[#0f172a] truncate">{report.fileName}</span>
+                <span className="ml-auto text-xs text-[#1d4ed8]">Download</span>
+              </a>
+            )}
+            {!report.fileName && <p className="text-xs text-[#94a3b8]">No file attached.</p>}
+          </div>
+          {/* Right — PDF or placeholder */}
+          <div className="flex-1 overflow-hidden bg-[#f8faff]">
+            {isPdf && report.fileDataUrl ? (
+              <iframe src={report.fileDataUrl} className="h-full w-full" title="NPD Report" />
+            ) : (
+              <div className="flex h-full items-center justify-center">
+                <p className="text-sm text-[#94a3b8]">{report.fileName ? "Not a PDF — use Download button on the left." : "No file attached."}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-h-[85vh] overflow-y-auto">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-3 border-b border-[#bfdbfe]/30 px-5 py-4">
+        <div>
+          <p className="font-semibold text-slate-900">{p.codeName} — NPD Report</p>
+          <p className="mt-0.5 text-xs text-[#64748b]">Submitted {fmt(report.submittedAt)}</p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <button onClick={() => setFullscreen(true)} title="Expand fullscreen"
+            className="rounded border border-[#bfdbfe]/50 px-2 py-1 text-xs text-[#64748b] hover:bg-[#eff6ff] transition">
+            ⛶ Expand
+          </button>
+          <button onClick={onClose} className="text-[#94a3b8] hover:text-[#1d4ed8] transition"><X size={18} /></button>
+        </div>
+      </div>
+
+      <div className="px-5 py-5 space-y-5">
+        {/* Outcome badge */}
+        <div className={`rounded-md border px-4 py-3 ${isPass ? "border-green-500/30 bg-green-500/10" : "border-red-500/30 bg-red-500/10"}`}>
+          <p className="text-[10px] uppercase tracking-wide text-[#64748b] mb-0.5">NPD Outcome</p>
+          <p className={`text-2xl font-bold ${isPass ? "text-green-400" : "text-red-400"}`}>
+            {isPass ? "✓ Pass" : "✕ Fail"}
+          </p>
+        </div>
+
+        {/* Observations */}
+        {report.notes ? (
+          <div>
+            <p className="text-[10px] uppercase tracking-wide text-[#64748b] mb-1.5">QA Observations</p>
+            <div className="rounded-md border border-[#bfdbfe]/40 bg-[#eff6ff] px-4 py-3 text-sm text-[#0f172a] whitespace-pre-wrap leading-relaxed">
+              {report.notes}
+            </div>
+          </div>
+        ) : (
+          <p className="text-xs text-[#94a3b8]">No observations recorded.</p>
+        )}
+
+        {/* Attached file */}
+        {report.fileName && report.fileDataUrl && (
+          <div>
+            <p className="text-[10px] uppercase tracking-wide text-[#64748b] mb-1.5">Attached Report</p>
+            {isPdf ? (
+              <iframe
+                src={report.fileDataUrl}
+                className="w-full rounded-md border border-[#bfdbfe]/40"
+                style={{ height: "420px" }}
+                title="NPD Report"
+              />
+            ) : (
+              <a
+                href={report.fileDataUrl}
+                download={report.fileName}
+                className="flex items-center gap-3 rounded-md border border-[#93c5fd]/40 bg-[#eff6ff] px-4 py-3 hover:bg-[#dbeafe] transition"
+              >
+                <FileText size={18} className="text-[#3b82f6] shrink-0" />
+                <span className="text-sm text-[#0f172a]">{report.fileName}</span>
+                <span className="ml-auto text-xs text-[#1d4ed8]">Download</span>
+              </a>
+            )}
+          </div>
+        )}
+
+        {!report.fileName && (
+          <p className="text-xs text-[#94a3b8]">No file was attached to this report.</p>
+        )}
+
+        {/* Historical reports from previous versions */}
+        {hasHistory && (
+          <div>
+            <p className="text-[10px] uppercase tracking-wide text-[#64748b] mb-2">Previous Sample Reports</p>
+            <div className="space-y-3">
+              {allReports.map((r, i) => (
+                <SingleReport key={i} report={r} version={r.version} label="Sample" />
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Verdict types ───────────────────────────────────────────────────────────
+
+type VerdictType = "approve" | "hold" | "reject";
+
+interface VerdictState {
+  productId: number;
+  type: VerdictType;
+  remarks: string;
+}
+
+// ─── Main page ───────────────────────────────────────────────────────────────
+
 export default function DecisionPendingPage() {
-  const { products, setProducts, addNotification, search } = useProducts();
+  const { products, addNotification, refreshProducts, search } = useProducts();
   const { showToast } = useToast();
   const [session, setSession] = useState<Session | null>(null);
-  const [expandedLog, setExpandedLog] = useState<number | null>(null);
-  const [improvementReq, setImprovementReq] = useState<Record<number, boolean>>({});
-  const [improvementNotes, setImprovementNotes] = useState<Record<number, string>>({});
-
   useEffect(() => { setSession(getSession()); }, []);
 
-  const isQA = session?.role === "QA";
-  const isCEO = session?.role === "CEO";
-  const isSales = session?.role === "Sales";
-  const isReadOnly = isQA || isSales;
+  const isReadOnly = false;
+
+  // verdict popup modal
+  const [verdict, setVerdict] = useState<VerdictState | null>(null);
+  // report modal
+  const [reportId, setReportId] = useState<number | null>(null);
 
   const q = search.toLowerCase();
   const visible = products
     .filter((p) => {
       if (p.status !== "Pending Decision") return false;
+      if (p.factoryComm?.improvementSampleExpected) return false;
       if (q) return p.codeName.toLowerCase().includes(q) || (p.factory ?? "").toLowerCase().includes(q) || p.skuCode.toLowerCase().includes(q);
       return true;
     })
@@ -42,245 +286,255 @@ export default function DecisionPendingPage() {
       return ORDER[a.priority] - ORDER[b.priority];
     });
 
-  // PASS → email factory → Approved (Golden Product)
-  function approveAndEmail(p: ProductRow) {
-    const now = new Date().toISOString();
-    const hasImprovement = !!improvementReq[p.id];
-    const notes = improvementNotes[p.id]?.trim() || undefined;
-    const internalCode = "AP-" + Math.random().toString(36).slice(2, 5).toUpperCase();
-    setProducts((prev) => prev.map((x) => x.id !== p.id ? x : {
-      ...x,
-      status: "Approved" as Status,
-      statusChangedAt: now,
-      orderDecision: {
-        state: "pending",
-        internalCode,
-        decidedAt: null,
-        decidedBy: null,
-        colors: [],
-        improvedGoldenSampleExpected: hasImprovement,
-        improvementNotes: notes,
-      },
-      activityLog: [...x.activityLog, {
-        action: hasImprovement
-          ? "Pass — emailed to factory — improvement requirement — awaiting order decision"
-          : "Pass — emailed to factory — awaiting order decision",
-        timestamp: now,
-        stages: hasImprovement
-          ? ["EMAILED TO FACTORY", "IMPROVEMENT REQUIREMENT"]
-          : ["EMAILED TO FACTORY"],
-      }],
-    }));
-    addNotification({ targetRoles: ["CEO", "Dev", "Sales", "Sales"], productId: p.id, productName: p.codeName, message: `${p.codeName} approved (${internalCode}) — Sales/CEO to place order.` });
-    showToast(`${p.codeName} approved — awaiting order`);
+  function openVerdict(id: number, type: VerdictType) {
+    setVerdict({ productId: id, type, remarks: "" });
   }
 
-  // FAIL: salvageable → email factory → On Hold
-  function sendToOnHold(p: ProductRow) {
-    const now = new Date().toISOString();
-    setProducts((prev) => prev.map((x) => x.id !== p.id ? x : {
-      ...x,
-      status: "On hold" as Status,
-      statusChangedAt: now,
-      factoryComm: { decidedAction: "EMAIL_FACTORY", decidedAt: now, acknowledgedAt: null, replyAt: null, replyText: null, tentativeReturnDate: null, editHistory: [] },
-      activityLog: [...x.activityLog, { action: "Factory emailed — sent to On Hold", timestamp: now, stages: ["EMAILED TO FACTORY"] }],
-    }));
-    addNotification({ targetRoles: ["Dev"], productId: p.id, productName: p.codeName, message: `${p.codeName} put on hold — email factory with failure observations and await their response.` });
-    showToast(`${p.codeName} sent to On Hold`);
+  function closeVerdict() { setVerdict(null); }
+
+  async function confirmVerdict() {
+    if (!verdict) return;
+    const p = products.find((x) => x.id === verdict.productId); if (!p) return;
+
+    let decision: string;
+    if (verdict.type === "approve") decision = "Approved";
+    else if (verdict.type === "hold") decision = "On hold";
+    else decision = "Rejected";
+
+    try {
+      await api.products.submitDecision(p.id, decision, verdict.remarks || undefined, p.version);
+      await refreshProducts();
+
+      if (verdict.type === "approve") {
+        addNotification({ targetRoles: ["CEO", "Dev", "Sales"], productId: p.id, productName: p.codeName, message: `${p.codeName} approved — Sales/CEO to place order.` });
+        showToast(`${p.codeName} approved — awaiting order`);
+      } else if (verdict.type === "hold") {
+        addNotification({ targetRoles: ["Dev"], productId: p.id, productName: p.codeName, message: `${p.codeName} put on hold — email factory and await response.` });
+        showToast(`${p.codeName} sent to On Hold`);
+      } else {
+        addNotification({ targetRoles: ["CEO"], productId: p.id, productName: p.codeName, message: `${p.codeName} rejected — CEO review needed.` });
+        showToast(`${p.codeName} sent to Rejected`);
+      }
+    } catch (err: unknown) {
+      const { message, isConflict } = apiErrorMessage(err);
+      if (isConflict) await refreshProducts();
+      showToast(isConflict ? message : `Error: ${message}`);
+    }
+
+    closeVerdict();
   }
 
-  // FAIL: move to Rejected buffer (CEO will decide: On Hold or Archive)
-  function sendToRejected(p: ProductRow) {
-    const now = new Date().toISOString();
-    setProducts((prev) => prev.map((x) => x.id !== p.id ? x : {
-      ...x,
-      status: "Rejected" as Status,
-      statusChangedAt: now,
-      activityLog: [...x.activityLog, { action: "Sent to Rejected — awaiting CEO decision on salvageability", timestamp: now, stages: ["REJECTED"] }],
-    }));
-    addNotification({ targetRoles: ["CEO"], productId: p.id, productName: p.codeName, message: `${p.codeName} failed NPD — CEO review needed: salvageable (On Hold) or archive?` });
-    showToast(`${p.codeName} sent to Rejected for CEO review`);
-  }
+  const reportProduct = products.find((x) => x.id === reportId) ?? null;
 
   return (
     <AppShell>
       <h1 className="text-2xl font-semibold text-slate-900">Decision Pending</h1>
       <p className="mt-1 text-sm text-[#1d4ed8]">
-        Products that have completed NPD testing and are waiting for a final decision.
-      </p>
-      <p className="mt-1 text-xs text-[#94a3b8]">
-        {isReadOnly
-          ? isSales
-            ? "Decisions are made by CEO and Dev. You'll be notified when a product is approved for ordering."
-            : "You are in read-only mode — only CEO and Dev can make decisions here."
-          : "Review each product's NPD result and observations, then make a decision based on the outcome."}
+        Products that completed NPD testing and are waiting for a verdict.
       </p>
 
-      <div className="mt-6 space-y-3">
-        {visible.length === 0 ? (
-          <div className="rounded-md border border-dashed border-[#bfdbfe]/40 px-5 py-16 text-center">
-            <p className="text-sm text-[#64748b]">No products waiting for a decision.</p>
-            <p className="mt-1 text-xs text-[#94a3b8]">Products appear here once QA submits an NPD report.</p>
-          </div>
-        ) : (
-          visible.map((p) => {
-            const isPass = p.npdReport?.outcome === "Pass";
-            return (
-              <GridBeam key={p.id} rows={4} cols={6} colorVariant="ocean" theme="dark" active className="rounded-md border border-[#bfdbfe]/40 bg-[#ffffff] overflow-hidden">
-
-                {/* Header */}
-                <div className="flex flex-wrap items-start gap-3 px-5 py-4">
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-white">{p.codeName}</p>
-                    <div className="flex flex-wrap items-center gap-2 mt-0.5">
-                      <p className="text-xs text-[#1d4ed8]">{p.skuCode}</p>
-                      {p.factory && <p className="text-xs text-[#64748b]">· {p.factory}</p>}
-                      {p.colors && <p className="text-xs text-[#94a3b8]">· {p.colors}</p>}
-                    </div>
-                  </div>
-                  <Chip color={PRIORITY_DOT[p.priority]} label={p.priority} />
-                  <button
-                    onClick={() => setExpandedLog(expandedLog === p.id ? null : p.id)}
-                    className="flex items-center gap-1 rounded-lg border border-[#bfdbfe]/50 px-3 py-1.5 text-xs text-[#64748b] hover:bg-[#eff6ff] hover:text-[#1d4ed8]">
-                    Timeline {expandedLog === p.id ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                  </button>
-                </div>
-
-                {/* NPD result + observations */}
-                {p.npdReport && (
-                  <div className={`border-t border-[#bfdbfe]/30 px-5 py-4 ${isPass ? "bg-green-500/5" : "bg-red-500/5"}`}>
-                    <div className="flex flex-wrap gap-4 mb-3">
-                      <div>
-                        <p className="text-[10px] text-[#64748b] uppercase tracking-wide mb-0.5">NPD Outcome</p>
-                        <p className={`text-lg font-bold ${isPass ? "text-green-400" : "text-red-400"}`}>
-                          {isPass ? "✓ Pass" : "✕ Fail"}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] text-[#64748b] uppercase tracking-wide mb-0.5">Submitted</p>
-                        <p className="text-xs text-[#1d4ed8]">{fmt(p.npdReport.submittedAt)}</p>
-                      </div>
-                      {p.npdReport.fileName && (
-                        <div>
-                          <p className="text-[10px] text-[#64748b] uppercase tracking-wide mb-0.5">Report</p>
-                          <p className="text-xs text-[#3b82f6]">{p.npdReport.fileName}</p>
-                        </div>
-                      )}
-                    </div>
-                    {p.npdReport.notes && (
-                      <div>
-                        <p className="text-[10px] text-[#64748b] uppercase tracking-wide mb-1">QA Observations</p>
-                        <p className="text-sm text-[#0f172a] whitespace-pre-wrap leading-relaxed">{p.npdReport.notes}</p>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Decision buttons */}
+      <GridBeam rows={6} cols={8} colorVariant="ocean" theme="dark" active className="mt-6 overflow-hidden rounded-md border border-[#bfdbfe]/40 bg-[#ffffff]/80">
+        <div className="overflow-x-auto">
+          <table className="min-w-[1200px] w-full text-left text-sm">
+            <thead>
+              <tr className="border-b border-[#bfdbfe]/40 text-[#0f172a]">
+                {/* report viewer button col */}
+                <th className="pl-3 pr-1 py-3 w-10" />
+                {/* thumbnail */}
+                <th className="pl-2 pr-2 py-3 w-14" />
+                <th className="px-4 py-3 font-medium">
+                  Product Name
+                </th>
+                <th className="px-4 py-3 font-medium">
+                  NPD Result
+                </th>
+                <th className="px-4 py-3 font-medium">
+                  Product Stages
+                </th>
                 {!isReadOnly && (
-                  <div className="border-t border-[#bfdbfe]/30 px-5 py-4">
-                    {isPass ? (
-                      <div>
-                        <p className="text-xs text-[#64748b] mb-3">
-                          Product passed NPD testing. Approve to email the factory and start Golden Product, or override below.
-                        </p>
-                        {/* Improvement requirement toggle */}
-                        <div className="mb-3 rounded-md border border-amber-500/20 bg-amber-500/5 px-4 py-2.5">
-                          <label className="flex items-center gap-3 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={!!improvementReq[p.id]}
-                              onChange={(e) => setImprovementReq((r) => ({ ...r, [p.id]: e.target.checked }))}
-                              className="h-4 w-4 rounded accent-amber-400"
-                            />
-                            <div>
-                              <p className="text-sm font-medium text-amber-300">Improvement requirement</p>
-                              <p className="text-xs text-amber-500/70">Check if the factory must implement improvements before golden sample is accepted</p>
-                            </div>
-                          </label>
-                          {!!improvementReq[p.id] && (
-                            <textarea
-                              value={improvementNotes[p.id] ?? ""}
-                              onChange={(e) => setImprovementNotes((r) => ({ ...r, [p.id]: e.target.value }))}
-                              placeholder="Describe the required improvements (e.g. fix cable quality, improve casing finish)…"
-                              rows={3}
-                              className="mt-3 w-full rounded-md border border-amber-500/30 bg-[#ffffff] px-3 py-2 text-sm text-[#0f172a] outline-none focus:border-amber-400 placeholder:text-[#5a4a2a] resize-none"
-                            />
+                  <th className="px-4 py-3 font-medium">
+                    Product Verdict
+                  </th>
+                )}
+                <th className="px-4 py-3 font-medium">
+                  Timeline
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {visible.length === 0 ? (
+                <tr>
+                  <td colSpan={isReadOnly ? 6 : 7} className="px-5 py-16 text-center">
+                    <p className="text-sm text-[#64748b]">No products waiting for a decision.</p>
+                    <p className="mt-1 text-xs text-[#94a3b8]">Products appear here once QA submits an NPD report.</p>
+                  </td>
+                </tr>
+              ) : (
+                visible.map((p) => {
+                  const isPass = p.npdReport?.outcome === "Pass";
+
+                  return (
+                    <tr key={p.id} className="border-b border-[#bfdbfe]/20">
+                        {/* Report viewer button */}
+                        <td className="pl-3 pr-1 py-3">
+                          {p.npdReport ? (
+                            <button
+                              onClick={() => setReportId(p.id)}
+                              title="View NPD report & observations"
+                              className="flex h-8 w-8 items-center justify-center rounded-md border border-[#bfdbfe]/50 text-[#3b82f6] hover:bg-[#eff6ff] hover:border-[#93c5fd] transition"
+                            >
+                              <FileText size={14} />
+                            </button>
+                          ) : (
+                            <div className="h-8 w-8" />
                           )}
-                        </div>
-                        <button
-                          onClick={() => approveAndEmail(p)}
-                          className="w-full rounded-md border border-green-500/40 bg-green-500/10 py-3 text-sm font-semibold text-green-400 hover:bg-green-500/20 transition mb-2"
-                        >
-                          {improvementReq[p.id]
-                            ? "✓ Email factory — improvement requirement — golden samples pending"
-                            : "✓ Email factory with pass result — golden samples pending"}
-                        </button>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => sendToOnHold(p)}
-                            className="flex-1 rounded-md border border-amber-500/30 bg-amber-500/5 py-2 text-sm font-medium text-amber-400 hover:bg-amber-500/10 transition"
-                          >
-                            Put on Hold
-                          </button>
-                          <button
-                            onClick={() => sendToRejected(p)}
-                            className="flex-1 rounded-md border border-red-500/30 bg-red-500/5 py-2 text-sm font-medium text-red-400 hover:bg-red-500/10 transition"
-                          >
-                            Reject
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div>
-                        <p className="text-xs text-[#64748b] mb-3">
-                          Product failed NPD testing. Email the factory with observations and request a revised sample, or send to Rejected for CEO to decide.
-                        </p>
-                        <div className="flex flex-col sm:flex-row gap-3">
-                          <button
-                            onClick={() => sendToOnHold(p)}
-                            className="flex-1 rounded-md border border-amber-500/30 bg-amber-500/5 py-3 text-sm font-semibold text-amber-400 hover:bg-amber-500/10 transition"
-                          >
-                            Email factory — put on hold
-                            <p className="text-[11px] font-normal text-amber-500/60 mt-0.5">Sends to On Hold to track factory response</p>
-                          </button>
-                          <button
-                            onClick={() => sendToRejected(p)}
-                            className="flex-1 rounded-md border border-red-500/30 bg-red-500/5 py-3 text-sm font-medium text-red-400 hover:bg-red-500/10 transition"
-                          >
-                            Send to Rejected
-                            <p className="text-[11px] font-normal text-red-500/50 mt-0.5">CEO decides: On Hold or Archive</p>
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
+                        </td>
 
-                {isReadOnly && p.npdReport && (
-                  <div className="border-t border-[#bfdbfe]/20 px-5 py-2">
-                    <p className="text-[11px] text-[#2a4a6a]">Decisions are made by CEO and Dev team.</p>
-                  </div>
-                )}
+                        {/* Thumbnail */}
+                        <td className="pl-2 pr-2 py-3">
+                          {p.imageDataUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={p.imageDataUrl} alt={p.codeName}
+                              className="h-12 w-12 rounded-md object-cover border border-[#bfdbfe]/40" />
+                          ) : (
+                            <div className="h-12 w-12 rounded-md border border-[#bfdbfe]/30 bg-[#eff6ff] flex items-center justify-center text-[10px] font-semibold text-[#2a4a6a] select-none">
+                              {p.codeName.slice(0, 2).toUpperCase()}
+                            </div>
+                          )}
+                        </td>
 
-                {/* Timeline */}
-                {expandedLog === p.id && p.activityLog.length > 0 && (
-                  <div className="border-t border-[#bfdbfe]/30 px-5 py-3 space-y-2">
-                    <p className="text-xs font-normal uppercase tracking-wide text-[#64748b]">Timeline</p>
-                    {p.activityLog.map((entry, i) => (
-                      <div key={i} className="flex gap-3 text-xs">
-                        <span className="text-[#d97706] tabular-nums shrink-0">{fmt(entry.timestamp)}</span>
-                        <span className="text-[#0f172a]">{entry.action}</span>
-                        {entry.note && <span className="text-[#1d4ed8] truncate">— {entry.note}</span>}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </GridBeam>
-            );
-          })
-        )}
-      </div>
+                        {/* Product */}
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-semibold text-slate-900 leading-snug">{p.codeName}</p>
+                            {(p.sampleVersion ?? 1) >= 1 && (
+                              <span className="rounded-md border border-purple-500/50 bg-purple-500/15 px-2 py-0.5 text-[11px] font-bold text-purple-600">
+                                v{p.sampleVersion ?? 1}{p.factoryComm?.improvementSampleExpected ? " Improvement" : ""}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-[#64748b] mt-0.5">{p.factory ?? p.skuCode}</p>
+                        </td>
+
+                        {/* NPD result */}
+                        <td className="px-4 py-3">
+                          {p.npdReport ? (
+                            <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                              isPass ? "bg-green-500/15 text-green-500" : "bg-red-500/15 text-red-400"
+                            }`}>
+                              {isPass ? "✓ Pass" : "✕ Fail"}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-[#94a3b8]">—</span>
+                          )}
+                        </td>
+
+                        {/* Stages */}
+                        <td className="px-4 py-3 max-w-xs">
+                          <StagePills stages={getPipelineTrail(p)} />
+                        </td>
+
+                        {/* Verdict buttons */}
+                        {!isReadOnly && (
+                          <td className="px-4 py-3">
+                            <div className="flex gap-1.5 flex-wrap">
+                              {([
+                                { type: "approve" as VerdictType, label: "✓ Approve", cls: "border-green-500/30 bg-green-500/5 text-green-500 hover:bg-green-500/15" },
+                                { type: "hold"    as VerdictType, label: "⏸ Hold",    cls: "border-[#bfdbfe]/50 bg-[#eff6ff] text-[#1d4ed8] hover:bg-[#dbeafe]" },
+                                { type: "reject"  as VerdictType, label: "✕ Reject",  cls: "border-red-500/30 bg-red-500/5 text-red-400 hover:bg-red-500/15" },
+                              ]).map(({ type, label, cls }) => (
+                                <button key={type} onClick={() => openVerdict(p.id, type)}
+                                  className={`rounded border px-2.5 py-1 text-xs font-medium transition ${cls}`}>
+                                  {label}
+                                </button>
+                              ))}
+                            </div>
+                          </td>
+                        )}
+
+                        {/* Timeline — sent to NPD / report uploaded / sent to decision */}
+                        <td className="px-4 py-3 tabular-nums whitespace-nowrap text-[11px]">
+                          <div className="flex flex-col gap-0.5">
+                            <span className="text-[#64748b]">Sample received: <span className="text-[#0f172a] font-medium">{fmtDate(p.sampleGivenDate ?? null) ?? "—"}</span></span>
+                            <span className="text-[#64748b]">Report submitted: <span className="text-[#0f172a] font-medium">{fmtDate(p.npdReport?.submittedAt ?? null) ?? "—"}</span></span>
+                            <span className="text-[#64748b]">Added here: <span className="text-[#d97706] font-medium">{fmtDate(p.statusChangedAt ?? null) ?? "—"}</span></span>
+                          </div>
+                        </td>
+                      </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </GridBeam>
+
+      {/* NPD Report viewer modal */}
+      <Modal open={!!reportProduct} onClose={() => setReportId(null)}>
+        {reportProduct && <ReportModal p={reportProduct} onClose={() => setReportId(null)} />}
+      </Modal>
+
+      {/* Verdict popup modal */}
+      <Modal open={!!verdict} onClose={closeVerdict}>
+        {verdict && (() => {
+          const p = products.find((x) => x.id === verdict.productId);
+          if (!p) return null;
+          const colorMap = { approve: "green", hold: "amber", reject: "red" } as const;
+          const c = colorMap[verdict.type];
+          const titleMap = { approve: "Approve product", hold: "Put on Hold", reject: "Reject product" };
+          const placeholderMap = {
+            approve: "Why is this being approved? (optional)",
+            hold: "What needs to be fixed? What is the factory being asked to do?",
+            reject: "Why is this being rejected? (optional)",
+          };
+          const confirmMap = { approve: "Confirm Approve", hold: "Confirm Hold", reject: "Confirm Reject" };
+          const btnCls = {
+            approve: "bg-green-500 hover:bg-green-600",
+            hold: "bg-amber-500 hover:bg-amber-600",
+            reject: "bg-red-500 hover:bg-red-600",
+          };
+          const labelCls = {
+            approve: "text-green-500",
+            hold: "text-amber-400",
+            reject: "text-red-400",
+          };
+          return (
+            <div className="space-y-4">
+              {/* Header */}
+              <div className="flex items-start justify-between gap-3 border-b border-[#bfdbfe]/30 pb-4">
+                <div>
+                  <p className="font-semibold text-slate-900">{p.codeName}</p>
+                  <p className="text-xs text-[#64748b] mt-0.5">{p.factory ?? p.skuCode}</p>
+                </div>
+                <button onClick={closeVerdict} className="text-[#94a3b8] hover:text-[#1d4ed8] transition shrink-0"><X size={18} /></button>
+              </div>
+
+              <p className={`text-xs font-semibold uppercase tracking-wide ${labelCls[verdict.type]}`}>
+                {titleMap[verdict.type]}
+              </p>
+
+              <textarea
+                value={verdict.remarks}
+                onChange={(e) => setVerdict((v) => v ? { ...v, remarks: e.target.value } : v)}
+                placeholder={placeholderMap[verdict.type]}
+                rows={3}
+                className="w-full rounded-md border border-[#bfdbfe]/50 bg-[#f8faff] px-3 py-2.5 text-sm text-[#0f172a] outline-none focus:border-[#93c5fd] placeholder:text-[#94a3b8] resize-none"
+              />
+
+              <div className="flex justify-start gap-2 pt-1">
+                <button onClick={confirmVerdict}
+                  className={`rounded-md px-4 py-2 text-xs font-semibold text-white transition ${btnCls[verdict.type]}`}>
+                  {confirmMap[verdict.type]}
+                </button>
+                <button onClick={closeVerdict}
+                  className="rounded-md border border-[#bfdbfe]/50 px-4 py-2 text-xs text-[#64748b] hover:bg-[#eff6ff] transition">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          );
+        })()}
+      </Modal>
     </AppShell>
   );
 }

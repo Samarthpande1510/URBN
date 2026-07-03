@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef, FormEvent } from "react";
 import { useToast } from "@/components/Toast";
 import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
 import { AppShell } from "@/components/AppShell";
@@ -9,9 +9,11 @@ import { Chip } from "@/components/Chip";
 import { useProducts, Status, ProductRow } from "@/lib/products-context";
 import { STATUS_DOT, PRIORITY_DOT } from "@/lib/colors";
 import { GridBeam } from "@/components/ui/grid-beam";
+import { getSession } from "@/lib/auth";
+import { api, apiErrorMessage } from "@/lib/api";
 
-type ActiveFilter = "All" | "Pending NPD" | "Pending Decision" | "Approved" | "On hold";
-const ACTIVE_FILTERS: ActiveFilter[] = ["All", "Pending NPD", "Pending Decision", "Approved", "On hold"];
+type ActiveFilter = "All" | "Pending NPD" | "Pending Decision" | "Approved" | "On hold" | "Rejected";
+const ACTIVE_FILTERS: ActiveFilter[] = ["All", "Pending NPD", "Pending Decision", "Approved", "On hold", "Rejected"];
 
 function formatTimestamp(value: string | null) {
   if (!value) return null;
@@ -70,22 +72,87 @@ function StagePills({ stages }: { stages: string[] }) {
 }
 
 function getPipelineTrail(p: ProductRow): string[] {
-  // Collect all explicit stage labels from the activity log in order
   const stages: string[] = [];
-  for (const entry of p.activityLog) {
-    if (entry.stages) stages.push(...entry.stages);
-  }
-  // If no stage tags yet, derive the starting state
-  if (stages.length === 0) stages.push("NPD TESTING: PENDING");
+  const fc = p.factoryComm;
+  const gw = p.goldenWorkflow;
+  const od = p.orderDecision;
+  const v = p.sampleVersion ?? 1;
 
-  // Append a pending suffix for products mid-flow
-  if (p.status === "On hold" && p.factoryComm) {
-    const last = stages[stages.length - 1];
-    if (last === "REVISED SAMPLE REQUESTED" || last === "EMAILED TO FACTORY") {
-      stages.push("REVISED SAMPLE PENDING");
-    }
+  // ── Step 1: NPD Testing (always first) ──
+  if (!p.npdReport) {
+    stages.push("NPD TESTING: PENDING");
+    return stages;
   }
-  return stages;
+  stages.push(p.npdReport.outcome === "Pass" ? "NPD TESTING: PASS" : "NPD TESTING: FAIL");
+
+  // ── Rejected / Archived ──
+  if (p.status === "Rejected" || p.status === "Archived") {
+    stages.push("REJECTED");
+    return stages;
+  }
+
+  // ── On Hold / Improvement sample cycle ──
+  if (p.status === "On hold" || (v > 1 && fc && !gw)) {
+    stages.push("EMAILED TO FACTORY");
+    stages.push("REVISED SAMPLE REQUESTED");
+    const sampleReceived = !!fc?.improvementSampleReceivedAt;
+    if (!sampleReceived) {
+      stages.push("REVISED SAMPLE PENDING");
+    } else if (p.npdReport && v > 1) {
+      // Improvement sample NPD submitted — show result
+      stages.push("REVISED SAMPLE RECEIVED");
+      stages.push(p.npdReport.outcome === "Pass" ? "REVISED TESTING: PASS" : "REVISED TESTING: FAIL");
+    } else {
+      stages.push("REVISED SAMPLE RECEIVED");
+    }
+    return stages;
+  }
+
+  // ── Improvement sample: in NPD Testing ──
+  if (v > 1 && fc && p.status === "Pending NPD") {
+    stages.push("EMAILED TO FACTORY");
+    stages.push("REVISED SAMPLE REQUESTED");
+    stages.push("REVISED SAMPLE RECEIVED");
+    stages.push("REVISED TESTING: PENDING");
+    return stages;
+  }
+
+  // ── Approved / Golden workflow ──
+  if (p.status === "Approved" || p.status === "Pending NPD" || p.status === "Pending Decision") {
+    if (fc?.replyReceivedAt) {
+      stages.push("EMAILED TO FACTORY");
+      stages.push("REVISED SAMPLE REQUESTED");
+      stages.push("REVISED SAMPLE RECEIVED");
+    }
+
+    if (!gw?.purchaseNotifiedAt) {
+      stages.push("GOLDEN SAMPLES PENDING");
+      return stages;
+    }
+    stages.push("PURCHASE TEAM NOTIFIED");
+    if (gw.orderConfirmedAt) stages.push("ORDER CONFIRMED");
+    if (gw.details) stages.push("PRODUCT DETAILS SAVED");
+    if (gw.details?.bomConfirmedAt) stages.push("BOM CONFIRMED");
+
+    const compTracks = gw.compliance?.tracks ?? [];
+    if (compTracks.length > 0) {
+      stages.push(compTracks.every((t) => t.confirmedAt) ? "COMPLIANCE CONFIRMED" : "COMPLIANCE INITIATED");
+    }
+    if (gw.packaging?.kldEmailedToDesignerAt) stages.push("PACKAGING RELEASED");
+    else if (gw.packaging) stages.push("PACKAGING INITIATED");
+
+    const gs = gw.goldenSample;
+    if (gs?.status === "Received") stages.push("GOLDEN SAMPLE RECEIVED");
+    else if (gs?.status === "In progress" || gs?.status === "Requested") stages.push("GOLDEN SAMPLE TRACKING STARTED");
+
+    if (od?.state === "placed") stages.push("ORDER PLACED");
+    else if (od?.state === "held") stages.push("ORDER HELD");
+    else if (od?.state === "dropped") stages.push("ORDER DROPPED");
+
+    return stages;
+  }
+
+  return stages.length ? stages : ["NPD TESTING: PENDING"];
 }
 
 function getPipelineStage(p: ProductRow): string {
@@ -114,15 +181,25 @@ function getPipelineStage(p: ProductRow): string {
         ? "Emailed to factory — improvement requirement — golden samples pending"
         : "Emailed to factory — golden samples pending";
       if (!gw.orderConfirmedAt)           return "Golden product — order confirmation pending";
-      if (!gw.details)                    return "Golden product — product details pending";
-      const compDone = !!gw.compliance?.confirmedAt;
-      const packDone = !!gw.packaging?.releasedAt;
+      if (!gw.details)                    return "Golden product — Part 1: product details pending";
+      const part1Checks = [gw.details.colourConfirmedAt, gw.details.logoMarkingConfirmedAt, gw.details.ratingLabelConfirmedAt, gw.details.bomConfirmedAt];
+      const part1Done = part1Checks.filter(Boolean).length;
+      if (part1Done < part1Checks.length) return `Golden product — Part 1: ${part1Done}/${part1Checks.length} confirmations done`;
+      const tracks = gw.compliance?.tracks ?? [];
+      const compDone = tracks.length > 0 && tracks.every((tr) => !!tr.confirmedAt);
+      const packDone = !!gw.packaging?.kldEmailedToDesignerAt;
       const gsDone   = gw.goldenSample?.status === "Received";
+      const compConfirmedCount = tracks.filter((tr) => tr.confirmedAt).length;
+      const complianceLabel = tracks.length === 0
+        ? "compliance not started"
+        : compDone
+        ? `compliance confirmed (${tracks.map((tr) => tr.name).join(", ")})`
+        : `compliance ${compConfirmedCount}/${tracks.length} confirmed (${tracks.map((tr) => tr.name).join(", ")})`;
       if (gsDone && compDone && packDone)  return "Golden product — all tracks complete";
-      if (gsDone)                          return "Golden sample received — tracks in progress";
-      if (gw.goldenSample?.status === "In progress") return "Golden sample in progress";
-      if (gw.goldenSample?.status === "Requested")   return "Golden samples pending";
-      if (!compDone)                       return "Golden product — compliance in progress";
+      if (gsDone)                          return `Golden sample received — ${complianceLabel}, packaging in progress`;
+      if (gw.goldenSample?.status === "In progress") return `Golden sample in progress — ${complianceLabel}`;
+      if (gw.goldenSample?.status === "Requested")   return `Golden samples pending — ${complianceLabel}`;
+      if (!compDone)                       return `Golden product — ${complianceLabel}`;
       return "Golden product — packaging & golden sample in progress";
     }
     default:
@@ -150,16 +227,82 @@ function TimelineRow({ label, value, pending }: { label: string; value: string |
 }
 
 
+const PRIORITY_OPTIONS = ["Urgent", "P1 — High", "P2 — Medium", "P3 — Low"];
+const emptyEditForm = { productName: "", factory: "", factorySku: "", colors: "", priority: PRIORITY_OPTIONS[0], specifications: "", sampleReceived: false, sampleGivenDate: "", deadline: "" };
+
 export default function DashboardPage() {
-  const { products, search } = useProducts();
+  const { products, setProducts, refreshProducts, search } = useProducts();
   const { showToast } = useToast();
   const [filter, setFilter] = useState<ActiveFilter>("All");
   const [activeId, setActiveId] = useState<number | null>(null);
   const [viewId, setViewId] = useState<number | null>(null);
+  const [editId, setEditId] = useState<number | null>(null);
+  const [editForm, setEditForm] = useState(emptyEditForm);
+  const [editImageName, setEditImageName] = useState<string | null>(null);
+  const [editImageDataUrl, setEditImageDataUrl] = useState<string | null>(null);
+  const editFileRef = useRef<HTMLInputElement>(null);
+  const [session, setSession] = useState<ReturnType<typeof getSession>>(null);
+  useEffect(() => { setSession(getSession()); }, []);
+  const isCEO = session?.role === "CEO";
+
+  function openModal(id: number) {
+    setActiveId(id);
+  }
+
+  function openEdit(p: ProductRow) {
+    const priorityMap: Record<string, string> = { Urgent: "Urgent", High: "P1 — High", Medium: "P2 — Medium", Low: "P3 — Low" };
+    setEditForm({
+      productName: p.codeName,
+      factory: p.factory ?? "",
+      factorySku: p.skuCode,
+      colors: (p as ProductRow & { colors?: string }).colors ?? "",
+      priority: priorityMap[p.priority] ?? PRIORITY_OPTIONS[0],
+      specifications: p.specifications ?? "",
+      sampleReceived: p.sampleReceived ?? false,
+      sampleGivenDate: p.sampleGivenDate ?? "",
+      deadline: p.deadline ?? "",
+    });
+    setEditImageName(null);
+    setEditImageDataUrl(p.imageDataUrl ?? null);
+    setEditId(p.id);
+  }
+
+  async function saveEdit(e: FormEvent) {
+    e.preventDefault();
+    if (!editId) return;
+    const p = products.find((x) => x.id === editId);
+    if (!p) return;
+    const priorityLabelMap: Record<string, string> = { "Urgent": "Urgent", "P1 — High": "High", "P2 — Medium": "Medium", "P3 — Low": "Low" };
+    try {
+      await api.products.update(editId, {
+        code_name: editForm.productName.trim() || p.codeName,
+        factory: editForm.factory || undefined,
+        sku_code: editForm.factorySku || undefined,
+        priority: priorityLabelMap[editForm.priority] ?? p.priority,
+        specifications: editForm.specifications || undefined,
+        sample_received: editForm.sampleReceived,
+        sample_given_date: editForm.sampleGivenDate || undefined,
+        deadline: editForm.deadline || p.deadline,
+        image_url: editImageDataUrl ?? p.imageDataUrl ?? undefined,
+      }, p.version);
+      await refreshProducts();
+      showToast("Product updated");
+      setEditId(null);
+    } catch (err: unknown) {
+      const { message, isConflict } = apiErrorMessage(err);
+      if (isConflict) await refreshProducts();
+      showToast(isConflict ? message : `Error: ${message}`);
+    }
+  }
 
   const q = search.toLowerCase();
   const activeProducts = products.filter((p) => {
-    if (p.status === "Rejected" || p.status === "Archived") return false;
+    if (p.status === "Rejected" || p.status === "Archived" || p.status === "Removed") return false;
+    if (q) return p.codeName.toLowerCase().includes(q) || (p.factory ?? "").toLowerCase().includes(q) || p.skuCode.toLowerCase().includes(q);
+    return true;
+  });
+  const rejectedProducts = products.filter((p) => {
+    if (p.status !== "Rejected") return false;
     if (q) return p.codeName.toLowerCase().includes(q) || (p.factory ?? "").toLowerCase().includes(q) || p.skuCode.toLowerCase().includes(q);
     return true;
   });
@@ -172,6 +315,7 @@ export default function DashboardPage() {
     "Pending Decision": activeProducts.filter((p) => p.status === "Pending Decision").length,
     Approved: activeProducts.filter((p) => p.status === "Approved").length,
     "On hold": activeProducts.filter((p) => p.status === "On hold").length,
+    Rejected: rejectedProducts.length,
   };
 
   const totalAll = products.length;
@@ -180,20 +324,20 @@ export default function DashboardPage() {
     .map((pr) => ({ name: pr, value: activeProducts.filter((p) => p.priority === pr).length, color: PRIORITY_DOT[pr] }))
     .filter((d) => d.value > 0);
 
-  const chartData = (["Pending NPD", "Pending Decision", "Approved", "On hold", "Rejected", "Archived"] as Status[]).map((status) => ({
+  const chartData = (["Pending NPD", "Pending Decision", "Approved", "On hold", "Rejected", "Archived", "Removed"] as Status[]).map((status) => ({
     name: status,
     value: products.filter((p) => p.status === status).length,
     color: STATUS_DOT[status],
   }));
 
-  const PRIORITY_ORDER: Record<string, number> = { Urgent: 0, High: 1, Medium: 2, Low: 3 };
-  const visible = (filter === "All" ? activeProducts : activeProducts.filter((p) => p.status === filter))
+  const getAddedAt = (p: ProductRow) => p.activityLog[0]?.timestamp ?? p.statusChangedAt ?? "";
+  const visible = (filter === "Rejected" ? rejectedProducts : filter === "All" ? activeProducts : activeProducts.filter((p) => p.status === filter))
     .slice()
-    .sort((a, b) => (PRIORITY_ORDER[a.priority] ?? 4) - (PRIORITY_ORDER[b.priority] ?? 4));
+    .sort((a, b) => getAddedAt(b).localeCompare(getAddedAt(a)));
   const active = products.find((p) => p.id === activeId) ?? null;
 
   function openProduct(p: ProductRow) {
-    setActiveId(p.id);
+    openModal(p.id);
   }
 
 
@@ -202,26 +346,7 @@ export default function DashboardPage() {
       <h1 className="text-2xl font-semibold text-slate-900">Dashboard</h1>
       <p className="mt-1 text-sm text-[#1d4ed8]">A live snapshot of every product in the pipeline. Click any row to see details.</p>
 
-      {/* KPI cards */}
-      <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {(
-          [
-            { label: "Total products", hint: "All products ever added", value: products.length, color: "#1e3a8a" },
-            { label: "Pending NPD", hint: "Waiting for QA to test", value: counts["Pending NPD"], color: STATUS_DOT["Pending NPD"] },
-            { label: "Approved", hint: "Passed QA and CEO review", value: counts["Approved"], color: STATUS_DOT["Approved"] },
-            { label: "On hold", hint: "Waiting on factory response", value: counts["On hold"], color: STATUS_DOT["On hold"] },
-          ] as const
-        ).map((kpi) => (
-          <div key={kpi.label} className="rounded-md border border-[#bfdbfe]/40 bg-[#ffffff] px-5 py-4">
-            <p className="text-xs font-medium uppercase tracking-wide text-[#64748b]">{kpi.label}</p>
-            <p className="mt-1 text-3xl font-semibold tabular-nums" style={{ color: kpi.color }}>
-              {kpi.value}
-            </p>
-            <p className="mt-1 text-[11px] text-[#94a3b8]">{kpi.hint}</p>
-          </div>
-        ))}
-      </div>
-
+      
       <div className="mt-6 grid gap-4 lg:grid-cols-2">
 
         {/* Status donut — rejection rate */}
@@ -257,7 +382,6 @@ export default function DashboardPage() {
         {/* Priority breakdown bars */}
         <div className="rounded-md border border-[#bfdbfe]/40 bg-[#ffffff] p-5">
           <p className="text-xs font-normal uppercase tracking-wide text-[#64748b]">Priority split</p>
-          <p className="mt-0.5 text-[11px] text-[#94a3b8]">How urgent the active products are. Urgent means action is needed today.</p>
           <div className="mt-4 space-y-3">
             {(["Urgent", "High", "Medium", "Low"] as const).map((pr) => {
               const count = activeProducts.filter((p) => p.priority === pr).length;
@@ -281,7 +405,6 @@ export default function DashboardPage() {
 
       <div className="mt-8">
         <h2 className="text-sm font-semibold text-[#0f172a]">Active products</h2>
-        <p className="mt-0.5 text-xs text-[#94a3b8]">Use the filters below to narrow down by stage. Click a row to see the full product detail.</p>
       </div>
 
       <div className="mt-3 flex flex-wrap gap-2">
@@ -307,35 +430,30 @@ export default function DashboardPage() {
             <tr className="border-b border-[#bfdbfe]/40 text-[#0f172a]">
               <th className="pl-4 pr-2 py-3 w-14" />
               <th className="px-4 py-3 font-medium">
-                Product
-                <p className="text-[10px] font-normal text-[#94a3b8] mt-0.5">Code name · Factory SKU</p>
+                Product Name
               </th>
               <th className="px-4 py-3 font-medium">
                 Priority
-                <p className="text-[10px] font-normal text-[#94a3b8] mt-0.5">How urgent this is</p>
               </th>
               <th className="px-4 py-3 font-medium">
-                Status
-                <p className="text-[10px] font-normal text-[#94a3b8] mt-0.5">Pipeline stage</p>
+                Current Status
               </th>
               <th className="px-4 py-3 font-medium">
-                Stages
-                <p className="text-[10px] font-normal text-[#94a3b8] mt-0.5">All pipeline stages</p>
+                Product Stages
               </th>
               <th className="px-4 py-3 font-medium">
                 Last updated
-                <p className="text-[10px] font-normal text-[#94a3b8] mt-0.5">When status last changed</p>
               </th>
               <th className="px-4 py-3 text-right font-medium w-32 whitespace-nowrap">
                 Deadline
-                <p className="text-[10px] font-normal text-[#94a3b8] mt-0.5">Target date</p>
               </th>
+              <th className="px-4 py-3 w-16" />
             </tr>
           </thead>
           <tbody>
             {visible.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-5 py-10 text-center">
+                <td colSpan={8} className="px-5 py-10 text-center">
                   <p className="text-sm text-[#64748b]">No products match this filter.</p>
                   <p className="mt-1 text-xs text-[#94a3b8]">Try selecting "All" above, or add a new product using the button in the top right.</p>
                 </td>
@@ -365,14 +483,19 @@ export default function DashboardPage() {
                   </td>
                   {/* Name + SKU stacked */}
                   <td className="px-4 py-3">
-                    <p className="font-semibold text-slate-900 leading-snug">{p.codeName}</p>
-                    <p className="text-xs text-[#64748b] mt-0.5">{p.skuCode}</p>
+                    <p className="font-semibold text-slate-900 leading-snug flex items-center gap-1.5 flex-wrap">
+                      {p.codeName}
+                      {(p.sampleVersion ?? 1) >= 1 && (
+                        <span className="rounded-md border border-purple-500/50 bg-purple-500/15 px-2 py-0.5 text-[11px] font-bold text-purple-600 tracking-wide">v{p.sampleVersion ?? 1} {p.status === "Approved" ? "Approved" : p.status === "On hold" ? "On Hold" : p.status === "Rejected" ? "Rejected" : ""}</span>
+                      )}
+                    </p>
                   </td>
                   <td className="px-4 py-3">
                     <Chip color={PRIORITY_DOT[p.priority]} label={p.priority} />
                   </td>
-                  <td className="px-4 py-3 whitespace-nowrap">
+                  <td className="px-4 py-3">
                     <Chip color={STATUS_DOT[p.status]} label={p.status} />
+                    <p className="mt-1 text-[11px] text-[#64748b] leading-snug max-w-[180px]">{getPipelineStage(p)}</p>
                   </td>
                   <td className="px-4 py-3 max-w-xs">
                     <StagePills stages={getPipelineTrail(p)} />
@@ -381,7 +504,15 @@ export default function DashboardPage() {
                     {p.statusChangedAt ? formatTimestamp(p.statusChangedAt) : "—"}
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums text-[#d97706] whitespace-nowrap">
-                    {new Date(p.deadline).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                    {p.deadline ? new Date(p.deadline).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : <span className="text-[#94a3b8]">—</span>}
+                  </td>
+                  <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      onClick={() => openEdit(p)}
+                      className="rounded border border-[#bfdbfe]/50 px-2.5 py-1 text-xs text-[#64748b] hover:bg-[#eff6ff] hover:text-[#1d4ed8] transition whitespace-nowrap"
+                    >
+                      ✎ Edit
+                    </button>
                   </td>
                 </tr>
               ))
@@ -394,7 +525,7 @@ export default function DashboardPage() {
       {(rejectedCount > 0 || archivedProducts.length > 0) && (
         <div className="mt-8 flex flex-wrap gap-3">
           {rejectedCount > 0 && (
-            <a href="/rejected" className="flex-1 min-w-[180px] rounded-md border border-red-500/20 bg-[#ffffff]/60 px-5 py-4 flex items-center justify-between gap-4 hover:bg-[#eff6ff] transition">
+            <a href="/decision-pending" className="flex-1 min-w-[180px] rounded-md border border-red-500/20 bg-[#ffffff]/60 px-5 py-4 flex items-center justify-between gap-4 hover:bg-[#eff6ff] transition">
               <p className="text-sm text-[#64748b]">
                 <span className="font-semibold text-red-400">{rejectedCount}</span> {rejectedCount === 1 ? "product" : "products"} pending CEO confirmation.
               </p>
@@ -413,11 +544,45 @@ export default function DashboardPage() {
       )}
 
       <Modal open={!!active} onClose={() => setActiveId(null)}>
+        {active && (
+          <div className="mb-5 border-b border-[#bfdbfe]/30 pb-4">
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg font-semibold text-[#0f172a] flex-1">{active.codeName}</h2>
+              <button onClick={() => { setActiveId(null); openEdit(active); }} className="rounded border border-[#bfdbfe]/50 px-2.5 py-1 text-xs text-[#64748b] hover:bg-[#eff6ff] hover:text-[#1d4ed8] transition">
+                ✎ Edit
+              </button>
+            </div>
+          </div>
+        )}
+        {active && active.status === "Pending NPD" && (
+          <div>
+            <p className="mt-1 text-sm text-[#1d4ed8]">{active.skuCode}</p>
+            <div className="mt-6 rounded-md border border-[#bfdbfe]/40 bg-[#eff6ff] px-5 py-4 text-center">
+              <p className="text-sm font-medium text-[#1d4ed8]">Waiting for QA to run NPD testing</p>
+              <p className="mt-1 text-xs text-[#64748b]">This is a read-only summary. NPD testing is managed from the NPD Testing page.</p>
+            </div>
+            <div className="mt-4 space-y-0 text-sm">
+              {([
+                ["Priority", active.priority],
+                ["Factory", active.factory ?? "—"],
+                active.deadline ? ["Deadline", new Date(active.deadline).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })] : null,
+              ].filter(Boolean) as string[][]).map(([label, value]) => (
+                <div key={label} className="flex justify-between border-b border-[#bfdbfe]/30 py-2">
+                  <span className="text-[#1d4ed8]">{label}</span>
+                  <span className="font-medium text-[#0f172a]">{value}</span>
+                </div>
+              ))}
+            </div>
+            <div className="mt-6 flex gap-3">
+              <button onClick={() => setActiveId(null)} className="flex-1 rounded-md border border-[#bfdbfe]/50 bg-[#ffffff] py-2 text-sm text-[#1d4ed8] hover:bg-[#eff6ff]">Close</button>
+            </div>
+          </div>
+        )}
+
         {active && active.status === "On hold" && (
           <div>
-            <h2 className="text-lg font-semibold text-[#0f172a]">{active.codeName}</h2>
             <p className="mt-1 text-sm text-[#1d4ed8]">{active.skuCode} — on hold</p>
-            <p className="mt-2 text-xs text-[#64748b]">Manage this product from the NPD Testing page.</p>
+            <p className="mt-2 text-xs text-[#64748b]">Manage this product from the On Hold page.</p>
             <div className="mt-5 space-y-0">
               <TimelineRow label="Factory emailed" value={active.factoryComm?.decidedAt ?? null} pending="No action yet" />
               <TimelineRow label="Dev acknowledged" value={active.factoryComm?.acknowledgedAt ?? null} pending="Pending" />
@@ -432,30 +597,50 @@ export default function DashboardPage() {
                 )}
               </div>
             )}
-            <button onClick={() => setActiveId(null)} className="mt-6 w-full rounded-md border border-[#bfdbfe]/50 bg-[#ffffff] py-2 text-sm text-[#1d4ed8] hover:bg-[#eff6ff]">Close</button>
+            <div className="mt-6 flex gap-3">
+              <button onClick={() => setActiveId(null)} className="flex-1 rounded-md border border-[#bfdbfe]/50 bg-[#ffffff] py-2 text-sm text-[#1d4ed8] hover:bg-[#eff6ff]">Close</button>
+            </div>
           </div>
         )}
 
         {active && active.status === "Approved" && (
           <div>
-            <h2 className="text-lg font-semibold text-[#0f172a]">{active.codeName}</h2>
             <p className="mt-1 text-sm text-[#1d4ed8]">{active.skuCode} — approved</p>
             <p className="mt-2 text-xs text-[#64748b]">Manage the full workflow from the Golden Product page.</p>
+            <p className="mt-1 text-xs font-medium text-[#1d4ed8]">{getPipelineStage(active)}</p>
             <div className="mt-5 space-y-0">
               <TimelineRow label="Purchase notified" value={active.goldenWorkflow?.purchaseNotifiedAt ?? null} pending="Not yet" />
               <TimelineRow label="Order confirmed" value={active.goldenWorkflow?.orderConfirmedAt ?? null} pending="Pending" />
               <TimelineRow label="Details saved" value={active.goldenWorkflow?.details?.savedAt ?? null} pending="Pending" />
-              <TimelineRow label="Compliance confirmed" value={active.goldenWorkflow?.compliance?.confirmedAt ?? null} pending="Pending" />
-              <TimelineRow label="Packaging released" value={active.goldenWorkflow?.packaging?.releasedAt ?? null} pending="Pending" />
+              {active.goldenWorkflow?.details && (
+                <div className="flex items-center justify-between border-b border-[#bfdbfe]/30 py-3 last:border-0">
+                  <span className="text-sm text-[#1d4ed8]">Part 1 confirmations</span>
+                  <span className="text-sm font-medium text-[#0f172a]">
+                    {[active.goldenWorkflow.details.colourConfirmedAt, active.goldenWorkflow.details.logoMarkingConfirmedAt, active.goldenWorkflow.details.ratingLabelConfirmedAt, active.goldenWorkflow.details.bomConfirmedAt].filter(Boolean).length}/4 done
+                  </span>
+                </div>
+              )}
+              {active.goldenWorkflow?.compliance?.tracks.length ? (
+                <div className="flex items-center justify-between border-b border-[#bfdbfe]/30 py-3 last:border-0">
+                  <span className="text-sm text-[#1d4ed8]">Compliance</span>
+                  <span className="text-sm font-medium text-[#0f172a]">
+                    {active.goldenWorkflow.compliance.tracks.filter((tr) => tr.confirmedAt).length}/{active.goldenWorkflow.compliance.tracks.length} confirmed
+                  </span>
+                </div>
+              ) : (
+                <TimelineRow label="Compliance confirmed" value={null} pending="Not started" />
+              )}
+              <TimelineRow label="Packaging completed" value={active.goldenWorkflow?.packaging?.kldEmailedToDesignerAt ?? null} pending="Pending" />
               <TimelineRow label="Golden sample" value={active.goldenWorkflow?.goldenSample?.receivedAt ?? null} pending={active.goldenWorkflow?.goldenSample?.status ?? "Not started"} />
             </div>
-            <button onClick={() => setActiveId(null)} className="mt-6 w-full rounded-md border border-[#bfdbfe]/50 bg-[#ffffff] py-2 text-sm text-[#1d4ed8] hover:bg-[#eff6ff]">Close</button>
+            <div className="mt-6 flex gap-3">
+              <button onClick={() => setActiveId(null)} className="flex-1 rounded-md border border-[#bfdbfe]/50 bg-[#ffffff] py-2 text-sm text-[#1d4ed8] hover:bg-[#eff6ff]">Close</button>
+            </div>
           </div>
         )}
 
         {active && active.status === "Pending Decision" && (
           <div>
-            <h2 className="text-lg font-semibold text-[#0f172a]">{active.codeName}</h2>
             <p className="mt-1 text-sm text-[#1d4ed8]">{active.skuCode}</p>
             <div className="mt-6 rounded-md border border-[#3b82f6]/30 bg-[#3b82f6]/10 px-5 py-4 text-center">
               <p className="text-sm font-medium text-[#3b82f6]">Awaiting team decision</p>
@@ -467,10 +652,6 @@ export default function DashboardPage() {
                   <span className="text-[#1d4ed8]">NPD outcome</span>
                   <span className="font-semibold text-green-400">{active.npdReport.outcome}</span>
                 </div>
-                <div className="flex justify-between border-b border-[#bfdbfe]/30 py-2">
-                  <span className="text-[#1d4ed8]">Submitted</span>
-                  <span className="text-[#0f172a]">{new Date(active.npdReport.submittedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
-                </div>
                 {active.npdReport.notes && (
                   <div className="border-b border-[#bfdbfe]/30 py-2">
                     <span className="block text-[#1d4ed8]">QA notes</span>
@@ -479,44 +660,86 @@ export default function DashboardPage() {
                 )}
               </div>
             )}
-            <button onClick={() => setActiveId(null)} className="mt-6 w-full rounded-md border border-[#bfdbfe]/50 bg-[#ffffff] py-2 text-sm text-[#1d4ed8] hover:bg-[#eff6ff]">Close</button>
-          </div>
-        )}
-
-        {active && active.status === "Pending NPD" && (
-          <div>
-            <h2 className="text-lg font-semibold text-[#0f172a]">{active.codeName}</h2>
-            <p className="mt-1 text-sm text-[#1d4ed8]">{active.skuCode} — pending NPD testing</p>
-
-            <div className="mt-6 space-y-3 text-sm">
-              <div className="flex justify-between border-b border-[#bfdbfe]/30 py-2">
-                <span className="text-[#1d4ed8]">Factory</span>
-                <span className="text-[#0f172a]">{active.factory || "—"}</span>
-              </div>
-              <div className="flex justify-between border-b border-[#bfdbfe]/30 py-2">
-                <span className="text-[#1d4ed8]">Sample received</span>
-                <span className="text-[#0f172a]">{active.sampleReceived ? "Yes" : "No"}</span>
-              </div>
-              {active.sampleReceived && (
-                <div className="flex justify-between border-b border-[#bfdbfe]/30 py-2">
-                  <span className="text-[#1d4ed8]">Given to QA on</span>
-                  <span className="text-[#0f172a]">{active.sampleGivenDate || "—"}</span>
-                </div>
-              )}
-              <div className="border-b border-[#bfdbfe]/30 py-2">
-                <span className="block text-[#1d4ed8]">Specifications</span>
-                <span className="mt-1 block text-[#0f172a]">{active.specifications || "—"}</span>
-              </div>
+            <div className="mt-6 flex gap-3">
+              <button onClick={() => setActiveId(null)} className="flex-1 rounded-md border border-[#bfdbfe]/50 bg-[#ffffff] py-2 text-sm text-[#1d4ed8] hover:bg-[#eff6ff]">Close</button>
             </div>
-
-            <button
-              onClick={() => setActiveId(null)}
-              className="mt-6 w-full rounded-md border border-[#bfdbfe]/50 bg-[#ffffff] py-2 text-sm text-[#1d4ed8] hover:bg-[#eff6ff]"
-            >
-              Close
-            </button>
           </div>
         )}
+      </Modal>
+
+      {/* Edit product modal */}
+      <Modal open={!!editId} onClose={() => setEditId(null)}>
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-lg font-semibold text-[#0f172a]">Edit Product</h2>
+          <button onClick={() => setEditId(null)} className="text-[#64748b] hover:text-[#0f172a]">✕</button>
+        </div>
+        <form onSubmit={saveEdit} className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
+          <div>
+            <label className="mb-1 block text-xs font-normal uppercase tracking-wide text-[#1d4ed8]">Product Name *</label>
+            <input required value={editForm.productName} onChange={(e) => setEditForm((f) => ({ ...f, productName: e.target.value }))}
+              className="w-full rounded-md border border-[#bfdbfe]/50 bg-[#ffffff] px-3 py-2.5 text-sm text-[#0f172a] outline-none focus:border-[#93c5fd]" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-xs font-normal uppercase tracking-wide text-[#1d4ed8]">Factory Name</label>
+              <input value={editForm.factory} onChange={(e) => setEditForm((f) => ({ ...f, factory: e.target.value }))}
+                placeholder="e.g. Shenzhen PowerTech"
+                className="w-full rounded-md border border-[#bfdbfe]/50 bg-[#ffffff] px-3 py-2.5 text-sm text-[#0f172a] outline-none focus:border-[#93c5fd]" />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-normal uppercase tracking-wide text-[#1d4ed8]">Factory SKU</label>
+              <input value={editForm.factorySku} onChange={(e) => setEditForm((f) => ({ ...f, factorySku: e.target.value }))}
+                placeholder="e.g. UPR136"
+                className="w-full rounded-md border border-[#bfdbfe]/50 bg-[#ffffff] px-3 py-2.5 text-sm text-[#0f172a] outline-none focus:border-[#93c5fd]" />
+            </div>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-normal uppercase tracking-wide text-[#1d4ed8]">Priority</label>
+            <select value={editForm.priority} onChange={(e) => setEditForm((f) => ({ ...f, priority: e.target.value }))}
+              className="w-full rounded-md border border-[#bfdbfe]/50 bg-[#ffffff] px-3 py-2.5 text-sm text-[#0f172a] outline-none focus:border-[#93c5fd]">
+              {PRIORITY_OPTIONS.map((p) => <option key={p}>{p}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-normal uppercase tracking-wide text-[#1d4ed8]">Specifications</label>
+            <textarea value={editForm.specifications} onChange={(e) => setEditForm((f) => ({ ...f, specifications: e.target.value }))}
+              rows={3} placeholder="Capacity, wattage, key specs..."
+              className="w-full rounded-md border border-[#bfdbfe]/50 bg-[#ffffff] px-3 py-2.5 text-sm text-[#0f172a] outline-none focus:border-[#93c5fd]" />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-normal uppercase tracking-wide text-[#1d4ed8]">Deadline</label>
+            <input type="date" value={editForm.deadline} onChange={(e) => setEditForm((f) => ({ ...f, deadline: e.target.value }))}
+              className="w-full rounded-md border border-[#bfdbfe]/50 bg-[#ffffff] px-3 py-2.5 text-sm text-[#0f172a] outline-none focus:border-[#93c5fd]" />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-normal uppercase tracking-wide text-[#1d4ed8]">Product image</label>
+            <input ref={editFileRef} type="file" accept="image/*" className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0] ?? null;
+                setEditImageName(file?.name ?? null);
+                if (file) {
+                  if (file.size > 2 * 1024 * 1024) { showToast("Image too large — max 2MB"); e.target.value = ""; return; }
+                  const r = new FileReader(); r.onload = (ev) => setEditImageDataUrl(ev.target?.result as string ?? null); r.readAsDataURL(file);
+                }
+              }} />
+            <button type="button" onClick={() => editFileRef.current?.click()}
+              className="relative w-full overflow-hidden rounded-md border-2 border-dashed border-[#bfdbfe]/50 bg-[#ffffff] text-sm text-[#1d4ed8] hover:bg-[#eff6ff]">
+              {editImageDataUrl
+                // eslint-disable-next-line @next/next/no-img-element
+                ? <img src={editImageDataUrl} alt="preview" className="h-32 w-full object-cover" />
+                : <div className="flex flex-col items-center justify-center py-6"><span className="text-2xl">↑</span><span className="mt-1 text-sm">Click to upload photo</span></div>}
+            </button>
+            {editImageDataUrl && <button type="button" onClick={() => setEditImageDataUrl(null)} className="mt-1 text-xs text-red-400 hover:underline">Remove image</button>}
+          </div>
+          <div className="flex gap-3 pt-2">
+            <button type="button" onClick={() => { const p = products.find((x) => x.id === editId); if (p) openEdit(p); }}
+              className="rounded-md border border-[#bfdbfe]/50 bg-[#ffffff] px-4 py-2.5 text-sm font-medium text-[#64748b] hover:bg-[#eff6ff]">Clear</button>
+            <button type="button" onClick={() => setEditId(null)}
+              className="flex-1 rounded-md border border-[#bfdbfe]/50 bg-[#ffffff] py-2.5 text-sm font-medium text-[#1d4ed8] hover:bg-[#eff6ff]">Cancel</button>
+            <button type="submit"
+              className="flex-1 rounded-md bg-blue-600 py-2.5 text-sm font-medium text-white hover:bg-blue-700">Save</button>
+          </div>
+        </form>
       </Modal>
 
       {/* Eye / detail view modal */}
