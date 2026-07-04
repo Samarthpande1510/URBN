@@ -7,7 +7,8 @@ from typing import Optional
 from database import get_db
 from models import (
     Product, ActivityLog, NpdReport, FactoryComm,
-    FactoryCommEdit, GoldenWorkflow, Notification, OrderDecision,
+    FactoryCommEdit, GoldenWorkflow, GoldenSampleTrack, Notification, OrderDecision,
+    GoldenDetails, ComplianceTrack, PackagingTrack,
 )
 from auth import get_current_user, require_role
 from models import User
@@ -141,6 +142,45 @@ def _serialize_factory_comm(fc):
     }
 
 
+def _serialize_golden_workflow(gw, db):
+    gs = db.query(GoldenSampleTrack).filter(GoldenSampleTrack.workflow_id == gw.id).first()
+    gd = db.query(GoldenDetails).filter(GoldenDetails.workflow_id == gw.id).first()
+    ct = db.query(ComplianceTrack).filter(ComplianceTrack.workflow_id == gw.id).all()
+    pt = db.query(PackagingTrack).filter(PackagingTrack.workflow_id == gw.id).first()
+    return {
+        "id": gw.id,
+        "purchase_notified_at": gw.purchase_notified_at.isoformat() if gw.purchase_notified_at else None,
+        "order_confirmed_at": gw.order_confirmed_at.isoformat() if gw.order_confirmed_at else None,
+        "compliance_not_needed": gw.compliance_not_needed,
+        "golden_sample_archived": gw.golden_sample_archived,
+        "compliance_archived": gw.compliance_archived,
+        "packaging_archived": gw.packaging_archived,
+        # Golden sample fields
+        "golden_sample_status": gs.status if gs else None,
+        "golden_sample_requested_at": gs.requested_at.isoformat() if gs and gs.requested_at else None,
+        "golden_sample_expected_date": gs.expected_date.isoformat() if gs and gs.expected_date else None,
+        "golden_sample_received_at": gs.received_at.isoformat() if gs and gs.received_at else None,
+        # Stage computation fields — enough for getPipelineTrail without calling /golden/{id}
+        "details_saved": gd is not None,
+        "colour_confirmed": gd.colour_confirmed if gd else False,
+        "logo_marking_confirmed": gd.logo_marking_confirmed if gd else False,
+        "rating_label_confirmed": gd.rating_label_confirmed if gd else False,
+        "bom_confirmed": gd.bom_confirmed if gd else False,
+        "details_saved_at": gd.saved_at.isoformat() if gd and gd.saved_at else None,
+        "compliance_tracks": [
+            {"confirmed_at": t.confirmed_at.isoformat() if t.confirmed_at else None}
+            for t in ct
+        ],
+        "packaging_initiated": pt is not None,
+        "packaging_sample_version": pt.sample_version if pt else 1,
+        "packaging_sample_received_at": pt.sample_received_at.isoformat() if pt and pt.sample_received_at else None,
+        "packaging_kld_acknowledged_at": pt.kld_acknowledged_at.isoformat() if pt and pt.kld_acknowledged_at else None,
+        "packaging_kld_emailed_at": pt.kld_emailed_to_designer_at.isoformat() if pt and pt.kld_emailed_to_designer_at else None,
+        "packaging_decision": pt.decision if pt else None,
+        "packaging_decision_at": pt.decision_at.isoformat() if pt and pt.decision_at else None,
+    }
+
+
 def _serialize_product(p, db):
     od = db.query(OrderDecision).filter(OrderDecision.product_id == p.id).first()
     gw = db.query(GoldenWorkflow).filter(GoldenWorkflow.product_id == p.id).first()
@@ -189,15 +229,7 @@ def _serialize_product(p, db):
             "order_archived": od.order_archived,
         } if od else None,
         "factory_comm": _serialize_factory_comm(db.query(FactoryComm).filter(FactoryComm.product_id == p.id).first()),
-        "golden_workflow": {
-            "id": gw.id,
-            "purchase_notified_at": gw.purchase_notified_at.isoformat() if gw.purchase_notified_at else None,
-            "order_confirmed_at": gw.order_confirmed_at.isoformat() if gw.order_confirmed_at else None,
-            "compliance_not_needed": gw.compliance_not_needed,
-            "golden_sample_archived": gw.golden_sample_archived,
-            "compliance_archived": gw.compliance_archived,
-            "packaging_archived": gw.packaging_archived,
-        } if gw else None,
+        "golden_workflow": _serialize_golden_workflow(gw, db) if gw else None,
     }
 
 
@@ -426,6 +458,36 @@ def archive_product(
     return {"message": "Archived"}
 
 
+class MoveToHoldReq(BaseModel):
+    remarks: Optional[str] = None
+
+@router.post("/{product_id}/move-to-hold")
+def move_rejected_to_hold(
+    product_id: int,
+    data: MoveToHoldReq = MoveToHoldReq(),
+    v: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("CEO", "Dev")),
+):
+    p = db.query(Product).filter(Product.id == product_id).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Product not found")
+    if p.status not in ("Rejected", "Archived"):
+        raise HTTPException(status_code=400, detail="Product must be Rejected or Archived to move to On Hold")
+    check_and_bump(p, v)
+    p.status = "On hold"
+    p.status_changed_at = datetime.utcnow()
+    if data.remarks:
+        p.verdict_remarks = (p.verdict_remarks + "\n\n" + data.remarks) if p.verdict_remarks else data.remarks
+    existing_fc = db.query(FactoryComm).filter(FactoryComm.product_id == product_id).first()
+    if not existing_fc:
+        db.add(FactoryComm(product_id=product_id, decided_action=None))
+    log(db, product_id, f"Moved to On Hold from Rejected{f' — {data.remarks}' if data.remarks else ''}", current_user)
+    push_notification(db, product_id, p.code_name, f"{p.code_name} moved to On Hold.", ["CEO", "Dev"])
+    db.commit()
+    return {"message": "Moved to On Hold"}
+
+
 @router.post("/{product_id}/restore-archived")
 def restore_archived_product(
     product_id: int,
@@ -437,13 +499,16 @@ def restore_archived_product(
     if not p or p.status != "Archived":
         raise HTTPException(status_code=400, detail="Product is not archived")
     check_and_bump(p, v)
-    p.status = "Pending NPD"
+    p.status = "On hold"
     p.status_changed_at = datetime.utcnow()
-    p.archive_remarks = None
-    log(db, product_id, "Restored from archive to Pending NPD", current_user)
-    push_notification(db, product_id, p.code_name, "Product restored from archive.", ["CEO", "Dev"])
+    # Ensure FactoryComm exists so the Hold tab can pick it up
+    existing_fc = db.query(FactoryComm).filter(FactoryComm.product_id == product_id).first()
+    if not existing_fc:
+        db.add(FactoryComm(product_id=product_id, decided_action=None))
+    log(db, product_id, "Restored from archive to On Hold", current_user)
+    push_notification(db, product_id, p.code_name, "Product restored from archive to On Hold.", ["CEO", "Dev"])
     db.commit()
-    return {"message": "Restored"}
+    return {"message": "Restored to On Hold"}
 
 
 # ── Factory communications ────────────────────────────────────────────────

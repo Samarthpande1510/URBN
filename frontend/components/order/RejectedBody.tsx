@@ -55,7 +55,7 @@ type CEOAction = "onhold" | "archive";
 interface VerdictState { type: CEOAction; remarks: string }
 
 export function RejectedBody() {
-  const { products, addNotification, refreshProducts, search } = useProducts();
+  const { products, setProducts, addNotification, refreshProducts, search } = useProducts();
   const { showToast } = useToast();
   const [session, setSession] = useState<Session | null>(null);
   const [expanded, setExpanded] = useState<number | null>(null);
@@ -85,7 +85,7 @@ export function RejectedBody() {
 
   async function moveToOnHold(p: ProductRow, remarks: string) {
     try {
-      await api.products.submitDecision(p.id, "On hold", remarks || undefined, p.version);
+      await api.products.moveToHold(p.id, remarks || undefined, p.version);
       await refreshProducts();
       addNotification({ targetRoles: ["CEO", "Dev"], productId: p.id, productName: p.codeName, message: `${p.codeName} moved back to On Hold by CEO.` });
       showToast("Moved back to On Hold");

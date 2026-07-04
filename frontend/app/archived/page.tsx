@@ -62,6 +62,8 @@ export default function ArchivedPage() {
   const { products, deleteProduct, addNotification, refreshProducts, search } = useProducts();
   const { showToast } = useToast();
   const [confirmId, setConfirmId] = useState<number | null>(null);
+  const [restoreId, setRestoreId] = useState<number | null>(null);
+  const [restoreRemarks, setRestoreRemarks] = useState("");
   const [session, setSession] = useState<Session | null>(null);
 
   useEffect(() => { setSession(getSession()); }, []);
@@ -74,17 +76,25 @@ export default function ArchivedPage() {
     return true;
   });
 
+  function openRestore(id: number) {
+    setRestoreId(id);
+    setRestoreRemarks("");
+    setConfirmId(null);
+  }
+
   async function handleRestore(p: ProductRow) {
     try {
-      await api.products.restoreArchived(p.id, p.version);
+      await api.products.moveToHold(p.id, restoreRemarks || undefined, p.version);
       await refreshProducts();
-      addNotification({ targetRoles: ["CEO", "Dev"], productId: p.id, productName: p.codeName, message: "Product restored to Pending NPD from archive." });
-      showToast(`${p.codeName} restored`);
+      addNotification({ targetRoles: ["CEO", "Dev"], productId: p.id, productName: p.codeName, message: `${p.codeName} restored from archive to On Hold.` });
+      showToast(`${p.codeName} restored to On Hold`);
     } catch (err: unknown) {
       const { message, isConflict } = apiErrorMessage(err);
       if (isConflict) await refreshProducts();
       showToast(isConflict ? message : `Error: ${message}`);
     }
+    setRestoreId(null);
+    setRestoreRemarks("");
   }
 
   function handleDelete(p: ProductRow) {
@@ -161,14 +171,14 @@ export default function ArchivedPage() {
                     {/* Actions */}
                     <div className="flex shrink-0 items-center gap-2 self-start">
                       <button
-                        onClick={() => handleRestore(p)}
-                        className="rounded border border-[#93c5fd]/40 px-3 py-1.5 text-xs font-medium text-[#1d4ed8] transition hover:bg-[#eff6ff]"
+                        onClick={() => openRestore(p.id)}
+                        className={`rounded border px-3 py-1.5 text-xs font-medium transition ${restoreId === p.id ? "border-amber-500 bg-amber-500/20 text-amber-500" : "border-[#93c5fd]/40 text-[#1d4ed8] hover:bg-[#eff6ff]"}`}
                       >
-                        Restore
+                        → On Hold
                       </button>
                       {isCEO && (
                         <button
-                          onClick={() => setConfirmId(p.id)}
+                          onClick={() => { setConfirmId(p.id); setRestoreId(null); }}
                           className="flex items-center gap-1.5 rounded border border-red-500/30 px-3 py-1.5 text-xs font-medium text-red-400 transition hover:bg-red-500/10"
                         >
                           <Trash2 size={12} />
@@ -186,6 +196,34 @@ export default function ArchivedPage() {
                         {remarks.map((r, i) => (
                           <RemarkBlock key={i} label={r.label} text={r.text} color={r.color} />
                         ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Restore to On Hold panel */}
+                  {restoreId === p.id && (
+                    <div className="border-t border-amber-500/20 bg-amber-500/5 px-5 py-3">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-amber-500 mb-2">Restore to On Hold — add remarks</p>
+                      <textarea
+                        value={restoreRemarks}
+                        onChange={(e) => setRestoreRemarks(e.target.value)}
+                        placeholder="Optional remarks about why this is being restored…"
+                        rows={2}
+                        className="w-full rounded-md border border-amber-500/30 bg-white px-3 py-2 text-sm text-[#0f172a] outline-none focus:border-amber-400 placeholder:text-[#94a3b8] resize-none"
+                      />
+                      <div className="mt-2 flex gap-2">
+                        <button
+                          onClick={() => handleRestore(p)}
+                          className="rounded-md border border-amber-500/40 bg-amber-500/20 px-4 py-1.5 text-xs font-semibold text-amber-500 hover:bg-amber-500/30 transition"
+                        >
+                          Confirm → On Hold
+                        </button>
+                        <button
+                          onClick={() => { setRestoreId(null); setRestoreRemarks(""); }}
+                          className="rounded-md border border-[#bfdbfe]/50 px-4 py-1.5 text-xs text-[#64748b] hover:bg-[#eff6ff] transition"
+                        >
+                          Cancel
+                        </button>
                       </div>
                     </div>
                   )}

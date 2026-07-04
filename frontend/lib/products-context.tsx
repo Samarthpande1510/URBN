@@ -296,10 +296,53 @@ export function mapProductFromApi(raw: Record<string, unknown>): ProductRow {
       goldenSampleArchived: (gw.golden_sample_archived as boolean) ?? false,
       complianceArchived: (gw.compliance_archived as boolean) ?? false,
       packagingArchived: (gw.packaging_archived as boolean) ?? false,
-      details: null,
-      compliance: null,
-      packaging: null,
-      goldenSample: null,
+      details: gw.details_saved ? {
+        productName: "",
+        skuCode: "",
+        colourConfirmedAt: gw.colour_confirmed ? (gw.details_saved_at as string ?? "yes") : null,
+        logoMarkingConfirmedAt: gw.logo_marking_confirmed ? (gw.details_saved_at as string ?? "yes") : null,
+        ratingLabelConfirmedAt: gw.rating_label_confirmed ? (gw.details_saved_at as string ?? "yes") : null,
+        bomConfirmedAt: gw.bom_confirmed ? (gw.details_saved_at as string ?? "yes") : null,
+        savedAt: (gw.details_saved_at as string) ?? "",
+      } : null,
+      compliance: Array.isArray(gw.compliance_tracks) && (gw.compliance_tracks as unknown[]).length > 0 ? {
+        tracks: (gw.compliance_tracks as { confirmed_at: string | null }[]).map((t) => ({
+          name: "" as ComplianceCertName,
+          initiatedAt: "",
+          sampleDispatchedAt: null,
+          expectedDeliveryDate: "",
+          certReceivedAt: null,
+          confirmedAt: t.confirmed_at,
+          status: "",
+          log: [],
+        })),
+      } : null,
+      packaging: gw.packaging_initiated ? {
+        vendorName: "",
+        vendorSetAt: null,
+        sampleVersion: (gw.packaging_sample_version as number) ?? 1,
+        sampleDispatchedAt: null,
+        sampleReceivedAt: (gw.packaging_sample_received_at as string | null) ?? null,
+        sampleStatus: null,
+        expectedDeliveryDate: "",
+        decision: (gw.packaging_decision as "Approved" | "Improvement Required" | null) ?? null,
+        decisionAt: (gw.packaging_decision_at as string | null) ?? null,
+        improvementNotes: null,
+        kldAcknowledgedAt: (gw.packaging_kld_acknowledged_at as string | null) ?? null,
+        kldEmailedToDesignerAt: (gw.packaging_kld_emailed_at as string | null) ?? null,
+        log: [],
+      } : null,
+      goldenSample: gw.golden_sample_status ? {
+        status: gw.golden_sample_status as GoldenSampleStatus,
+        requestedAt: (gw.golden_sample_requested_at as string | null) ?? null,
+        expectedDate: (gw.golden_sample_expected_date as string) ?? "",
+        receivedAt: (gw.golden_sample_received_at as string | null) ?? null,
+        approvedAt: null,
+        improvementFixed: null,
+        improvementFixedAt: null,
+        improvementFixedNotes: null,
+        log: [],
+      } : null,
     } : undefined,
     activityLog: [],
   };
@@ -345,6 +388,7 @@ export function mapGoldenFromApi(data: Record<string, unknown>): GoldenWorkflow 
       vendorSetAt: (packaging.vendor_set_at as string | null) ?? null,
       sampleVersion: (packaging.sample_version as number) ?? 1,
       sampleDispatchedAt: (packaging.sample_dispatched_at as string | null) ?? null,
+      sampleReceivedAt: (packaging.sample_received_at as string | null) ?? null,
       sampleStatus: (packaging.sample_status as "Awaiting" | "Received" | null) ?? null,
       expectedDeliveryDate: (packaging.expected_delivery_date as string) ?? "",
       decision: (packaging.decision as "Approved" | "Improvement Required" | null) ?? null,
@@ -404,7 +448,29 @@ export function ProductsProvider({ children }: { children: ReactNode }) {
   const refreshProducts = useCallback(async () => {
     try {
       const data = await api.products.list();
-      setProducts((data as Record<string, unknown>[]).map(mapProductFromApi));
+      setProducts((prev) => {
+        const fresh = (data as Record<string, unknown>[]).map(mapProductFromApi);
+        // Preserve golden workflow sub-data (details/compliance/packaging) fetched via refreshGolden
+        // /products now includes goldenSample status directly, so don't need to preserve that
+        return fresh.map((np) => {
+          const existing = prev.find((ep) => ep.id === np.id);
+          if (existing?.goldenWorkflow && np.goldenWorkflow) {
+            return {
+              ...np,
+              goldenWorkflow: {
+                ...np.goldenWorkflow,
+                // Prefer full cached data (from refreshGolden) over minimal /products data
+                details: existing.goldenWorkflow.details ?? np.goldenWorkflow.details,
+                compliance: existing.goldenWorkflow.compliance ?? np.goldenWorkflow.compliance,
+                packaging: existing.goldenWorkflow.packaging ?? np.goldenWorkflow.packaging,
+                // Use fresh goldenSample from /products if available, else keep cached
+                goldenSample: np.goldenWorkflow.goldenSample ?? existing.goldenWorkflow.goldenSample,
+              },
+            };
+          }
+          return np;
+        });
+      });
     } catch {
       // silently fail — user might not be logged in yet
     }

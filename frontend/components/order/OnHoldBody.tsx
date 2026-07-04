@@ -166,6 +166,28 @@ function HoldForm({ p, isReadOnly, onClose }: { p: ProductRow; isReadOnly: boole
 
       <div className="px-5 py-5 space-y-5">
 
+        {/* Remarks from previous stages */}
+        {(() => {
+          const entries: { label: string; text: string; color: string }[] = [];
+          if (p.npdReport?.notes) entries.push({ label: "NPD testing notes", text: p.npdReport.notes, color: "border-[#bfdbfe]/40 bg-[#eff6ff] text-[#1d4ed8]" });
+          if (p.verdictRemarks) entries.push({ label: "Decision Pending feedback", text: p.verdictRemarks, color: "border-amber-400/30 bg-amber-500/5 text-amber-700" });
+          if (p.factoryComm?.replyText) entries.push({ label: "Factory reply", text: p.factoryComm.replyText, color: "border-[#93c5fd]/30 bg-[#eff6ff] text-[#1d4ed8]" });
+          if (p.factoryComm?.internalDecisionNotes) entries.push({ label: "Internal decision notes", text: p.factoryComm.internalDecisionNotes, color: "border-[#93c5fd]/30 bg-[#eff6ff] text-[#1d4ed8]" });
+          if (p.orderDecision?.improvementNotes) entries.push({ label: "Improvement requirement", text: p.orderDecision.improvementNotes, color: "border-purple-400/30 bg-purple-500/5 text-purple-700" });
+          if (entries.length === 0) return null;
+          return (
+            <div className="rounded-md border border-[#bfdbfe]/40 bg-[#f8faff] px-4 py-3 space-y-2">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-[#64748b]">Remarks from previous stages</p>
+              {entries.map((e, i) => (
+                <div key={i} className={`rounded-md border px-3 py-2.5 ${e.color}`}>
+                  <p className="text-[10px] font-semibold uppercase tracking-wide opacity-70 mb-0.5">{e.label}</p>
+                  <p className="text-sm italic leading-snug">"{e.text}"</p>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
+
         {/* Observations */}
         <div>
           <label className="block text-[10px] uppercase tracking-wide font-medium text-[#1d4ed8] mb-1.5">

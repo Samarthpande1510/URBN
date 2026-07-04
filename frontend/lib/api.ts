@@ -97,6 +97,8 @@ export const api = {
       apiFetch(`/products/${id}/archive`, "POST", { remarks: remarks || undefined }, v),
     restoreArchived: (id: number, v?: number) =>
       apiFetch(`/products/${id}/restore-archived`, "POST", undefined, v),
+    moveToHold: (id: number, remarks?: string, v?: number) =>
+      apiFetch(`/products/${id}/move-to-hold`, "POST", { remarks: remarks || undefined }, v),
     factoryAction: (id: number, action: string, v?: number) =>
       apiFetch(`/products/${id}/factory-comm/action`, "POST", { action }, v),
     factoryExpectedDate: (id: number, expected_reply_date: string, v?: number) =>

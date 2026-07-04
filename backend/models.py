@@ -182,6 +182,7 @@ class PackagingTrack(Base):
     expected_delivery_date = Column(Date)
     # Step 4: Status + decision cycle
     sample_status = Column(String)                 # Awaiting | Received
+    sample_received_at = Column(DateTime)
     decision = Column(String)                      # Approved | Improvement Required
     decision_at = Column(DateTime)
     improvement_notes = Column(Text)
