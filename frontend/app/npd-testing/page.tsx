@@ -394,8 +394,7 @@ export default function NpdTestingPage() {
                   </th>
                 )}
                 <th className="px-4 py-3 font-medium text-center">
-                  Sample received date
-                  <p className="text-[10px] font-normal text-[#94a3b8] mt-0.5">{showHistory ? "Sample received · report uploaded" : "When sample arrived"}</p>
+                  Timeline
                 </th>
                 {!showHistory && <th className="px-4 py-3 font-medium w-40">Sample</th>}
               </tr>
@@ -476,8 +475,8 @@ export default function NpdTestingPage() {
                     <td className="px-4 py-3 tabular-nums text-[#d97706] whitespace-nowrap text-center">
                       {showHistory ? (
                         <div className="flex flex-col gap-0.5 text-xs">
-                          <span>{p.sampleGivenDate ? new Date(p.sampleGivenDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—"}</span>
-                          <span className="text-[#94a3b8]">Report: {p.npdReport?.submittedAt ? fmt(p.npdReport.submittedAt) : "—"}</span>
+                          <span> Sample received: {p.sampleGivenDate ? new Date(p.sampleGivenDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—"}</span>
+                          <span className="text-[#94a3b8]">Report submitted: {p.npdReport?.submittedAt ? fmt(p.npdReport.submittedAt) : "—"}</span>
                         </div>
                       ) : (
                         p.sampleGivenDate

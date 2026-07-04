@@ -32,6 +32,7 @@ const STAGE_PILL_STYLE: Record<string, string> = {
   "NPD TESTING: FAIL":       "bg-red-500/15 text-red-400 border-red-500/30",
   "EMAILED TO FACTORY":      "bg-[#eff6ff] text-[#3b82f6] border-[#93c5fd]/40",
   "IMPROVEMENT REQUIREMENT": "bg-amber-500/10 text-amber-400 border-amber-500/30",
+  "DECISION PENDING":         "bg-amber-500/10 text-amber-500 border-amber-500/30",
   "GOLDEN SAMPLES PENDING":  "bg-purple-500/10 text-purple-400 border-purple-500/25",
   "REVISED SAMPLE REQUESTED":"bg-[#eff6ff] text-[#3b82f6] border-[#93c5fd]/40",
   "REVISED SAMPLE PENDING":  "bg-amber-500/10 text-amber-400 border-amber-500/30",
@@ -126,7 +127,7 @@ function getPipelineTrail(p: ProductRow): string[] {
     }
 
     if (!gw?.purchaseNotifiedAt) {
-      stages.push("GOLDEN SAMPLES PENDING");
+      stages.push(p.status === "Pending Decision" ? "DECISION PENDING" : "GOLDEN SAMPLES PENDING");
       return stages;
     }
     stages.push("PURCHASE TEAM NOTIFIED");
@@ -309,8 +310,13 @@ export default function DashboardPage() {
   const rejectedCount = products.filter((p) => p.status === "Rejected").length;
   const archivedProducts = products.filter((p) => p.status === "Archived");
 
+  const allTabProducts = [
+    ...activeProducts,
+    ...rejectedProducts,
+  ];
+
   const counts = {
-    All: activeProducts.length,
+    All: allTabProducts.length,
     "Pending NPD": activeProducts.filter((p) => p.status === "Pending NPD").length,
     "Pending Decision": activeProducts.filter((p) => p.status === "Pending Decision").length,
     Approved: activeProducts.filter((p) => p.status === "Approved").length,
@@ -331,9 +337,14 @@ export default function DashboardPage() {
   }));
 
   const getAddedAt = (p: ProductRow) => p.activityLog[0]?.timestamp ?? p.statusChangedAt ?? "";
-  const visible = (filter === "Rejected" ? rejectedProducts : filter === "All" ? activeProducts : activeProducts.filter((p) => p.status === filter))
+  const visible = (filter === "Rejected" ? rejectedProducts : filter === "All" ? allTabProducts : activeProducts.filter((p) => p.status === filter))
     .slice()
-    .sort((a, b) => getAddedAt(b).localeCompare(getAddedAt(a)));
+    .sort((a, b) => {
+      const aRej = a.status === "Rejected" ? 1 : 0;
+      const bRej = b.status === "Rejected" ? 1 : 0;
+      if (aRej !== bRej) return aRej - bRej;
+      return getAddedAt(b).localeCompare(getAddedAt(a));
+    });
   const active = products.find((p) => p.id === activeId) ?? null;
 
   function openProduct(p: ProductRow) {

@@ -99,6 +99,10 @@ export const api = {
       apiFetch(`/products/${id}/restore-archived`, "POST", undefined, v),
     moveToHold: (id: number, remarks?: string, v?: number) =>
       apiFetch(`/products/${id}/move-to-hold`, "POST", { remarks: remarks || undefined }, v),
+    rejectFromHold: (id: number, remarks?: string, v?: number) =>
+      apiFetch(`/products/${id}/reject-from-hold`, "POST", { remarks: remarks || undefined }, v),
+    placeOrderFromHold: (id: number, data: { colors: { color: string; quantity: number }[]; improvement_notes: string; remarks?: string }, v?: number) =>
+      apiFetch(`/products/${id}/place-order-from-hold`, "POST", data, v),
     factoryAction: (id: number, action: string, v?: number) =>
       apiFetch(`/products/${id}/factory-comm/action`, "POST", { action }, v),
     factoryExpectedDate: (id: number, expected_reply_date: string, v?: number) =>

@@ -458,6 +458,34 @@ def archive_product(
     return {"message": "Archived"}
 
 
+class RejectFromHoldReq(BaseModel):
+    remarks: Optional[str] = None
+
+@router.post("/{product_id}/reject-from-hold")
+def reject_from_hold(
+    product_id: int,
+    data: RejectFromHoldReq = RejectFromHoldReq(),
+    v: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("CEO", "Dev")),
+):
+    p = db.query(Product).filter(Product.id == product_id).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Product not found")
+    if p.status != "On hold":
+        raise HTTPException(status_code=400, detail="Product must be On hold to reject from hold")
+    check_and_bump(p, v)
+    p.status = "Rejected"
+    p.status_changed_at = datetime.utcnow()
+    p.rejected_by = current_user.name
+    if data.remarks:
+        p.verdict_remarks = data.remarks
+    log(db, product_id, f"Rejected from On Hold{f' — {data.remarks}' if data.remarks else ''}", current_user)
+    push_notification(db, product_id, p.code_name, f"{p.code_name} rejected from On Hold.", ["CEO", "Dev"])
+    db.commit()
+    return {"message": "Rejected"}
+
+
 class MoveToHoldReq(BaseModel):
     remarks: Optional[str] = None
 
@@ -691,6 +719,82 @@ def update_order_decision(
     db.commit()
     db.refresh(od)
     return od
+
+
+class PlaceOrderFromHoldReq(BaseModel):
+    colors: list                          # [{"color": "Black", "quantity": 100}, ...]
+    improvement_notes: str                # required — always mandatory from Hold
+    remarks: Optional[str] = None
+
+@router.post("/{product_id}/place-order-from-hold", status_code=201)
+def place_order_from_hold(
+    product_id: int,
+    data: PlaceOrderFromHoldReq,
+    v: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("CEO", "Dev", "Purchase")),
+):
+    p = db.query(Product).filter(Product.id == product_id).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Product not found")
+    if p.status != "On hold":
+        raise HTTPException(status_code=400, detail="Product must be On hold to place order from hold")
+    if not data.improvement_notes or not data.improvement_notes.strip():
+        raise HTTPException(status_code=400, detail="improvement_notes is required when placing order from hold")
+    check_and_bump(p, v)
+    now = datetime.utcnow()
+
+    # Move product to Approved
+    p.status = "Approved"
+    p.status_changed_at = now
+
+    # Create GoldenWorkflow (purchase-notified immediately)
+    gw = db.query(GoldenWorkflow).filter(GoldenWorkflow.product_id == product_id).first()
+    if not gw:
+        gw = GoldenWorkflow(product_id=product_id, purchase_notified_at=now, order_confirmed_at=now)
+        db.add(gw)
+        db.flush()
+    else:
+        gw.purchase_notified_at = gw.purchase_notified_at or now
+        gw.order_confirmed_at = gw.order_confirmed_at or now
+
+    # Create GoldenSampleTrack
+    gs = db.query(GoldenSampleTrack).filter(GoldenSampleTrack.workflow_id == gw.id).first()
+    if not gs:
+        db.add(GoldenSampleTrack(workflow_id=gw.id, status="Requested", requested_at=now))
+
+    # Create or update OrderDecision — always improvement_sample_expected
+    internal_code = f"ORD-{product_id}-{int(now.timestamp())}"
+    od = db.query(OrderDecision).filter(OrderDecision.product_id == product_id).first()
+    if od:
+        od.state = "placed"
+        od.internal_code = od.internal_code or internal_code
+        od.colors = data.colors
+        od.improvement_notes = data.improvement_notes.strip()
+        od.improved_golden_sample_expected = None
+        od.decided_by_id = current_user.id
+        od.decided_by_name = current_user.name
+        od.decided_at = now
+        od.remarks = data.remarks
+    else:
+        od = OrderDecision(
+            product_id=product_id,
+            state="placed",
+            internal_code=internal_code,
+            colors=data.colors,
+            improvement_notes=data.improvement_notes.strip(),
+            improved_golden_sample_expected=None,
+            decided_by_id=current_user.id,
+            decided_by_name=current_user.name,
+            decided_at=now,
+            remarks=data.remarks,
+        )
+        db.add(od)
+
+    log(db, product_id, f"Order placed from On Hold ({internal_code}) — improvement requirement: {data.improvement_notes.strip()}", current_user)
+    push_notification(db, product_id, p.code_name, f"Order placed from On Hold. Improvement sample required.", NOTIFY_ALL)
+    db.commit()
+    return {"message": "Order placed", "internal_code": internal_code}
 
 
 @router.post("/{product_id}/order-decision/archive")

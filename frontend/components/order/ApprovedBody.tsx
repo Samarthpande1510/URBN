@@ -10,13 +10,32 @@ import { Modal } from "@/components/Modal";
 import { Plus, X } from "lucide-react";
 
 const STAGE_PILL_STYLE: Record<string, string> = {
-  "EMAILED TO FACTORY":      "bg-[#eff6ff] text-[#3b82f6] border-[#93c5fd]/40",
-  "IMPROVEMENT REQUIREMENT": "bg-amber-500/10 text-amber-400 border-amber-500/30",
-  "GOLDEN SAMPLES PENDING":  "bg-purple-500/10 text-purple-400 border-purple-500/25",
-  "ORDER PLACED":            "bg-green-500/15 text-green-400 border-green-500/30",
-  "ORDER HELD":              "bg-amber-500/10 text-amber-400 border-amber-500/25",
-  "ORDER DROPPED":           "bg-red-500/10 text-red-400 border-red-500/25",
-  "NPD TESTING: PASS":       "bg-green-500/15 text-green-400 border-green-500/30",
+  "NPD TESTING: PENDING":        "bg-[#eff6ff] text-[#64748b] border-[#bfdbfe]/60",
+  "NPD TESTING: PASS":           "bg-green-500/15 text-green-400 border-green-500/30",
+  "NPD TESTING: FAIL":           "bg-red-500/15 text-red-400 border-red-500/30",
+  "EMAILED TO FACTORY":          "bg-[#eff6ff] text-[#3b82f6] border-[#93c5fd]/40",
+  "REVISED SAMPLE REQUESTED":    "bg-amber-500/10 text-amber-400 border-amber-500/30",
+  "REVISED SAMPLE PENDING":      "bg-amber-500/10 text-amber-400 border-amber-500/30",
+  "REVISED SAMPLE RECEIVED":     "bg-green-500/10 text-green-400 border-green-500/25",
+  "REVISED TESTING: PENDING":    "bg-[#eff6ff] text-[#64748b] border-[#bfdbfe]/60",
+  "REVISED TESTING: PASS":       "bg-green-500/15 text-green-400 border-green-500/30",
+  "REVISED TESTING: FAIL":       "bg-red-500/15 text-red-400 border-red-500/30",
+  "REJECTED":                    "bg-red-500/15 text-red-400 border-red-500/30",
+  "DECISION PENDING":            "bg-amber-500/10 text-amber-500 border-amber-500/30",
+  "GOLDEN SAMPLES PENDING":      "bg-purple-500/10 text-purple-400 border-purple-500/25",
+  "PURCHASE TEAM NOTIFIED":      "bg-[#eff6ff] text-[#3b82f6] border-[#93c5fd]/40",
+  "ORDER CONFIRMED":             "bg-green-500/10 text-green-400 border-green-500/25",
+  "PRODUCT DETAILS SAVED":       "bg-purple-500/10 text-purple-400 border-purple-500/25",
+  "BOM CONFIRMED":               "bg-purple-500/15 text-purple-300 border-purple-500/35",
+  "COMPLIANCE INITIATED":        "bg-[#eff6ff] text-[#3b82f6] border-[#93c5fd]/40",
+  "COMPLIANCE CONFIRMED":        "bg-green-500/10 text-green-400 border-green-500/25",
+  "PACKAGING INITIATED":         "bg-[#eff6ff] text-[#3b82f6] border-[#93c5fd]/40",
+  "PACKAGING RELEASED":          "bg-green-500/10 text-green-400 border-green-500/25",
+  "GOLDEN SAMPLE TRACKING STARTED": "bg-amber-500/10 text-amber-400 border-amber-500/25",
+  "GOLDEN SAMPLE RECEIVED":      "bg-green-500/10 text-green-400 border-green-500/25",
+  "ORDER PLACED":                "bg-green-500/15 text-green-400 border-green-500/30",
+  "ORDER HELD":                  "bg-amber-500/10 text-amber-400 border-amber-500/25",
+  "ORDER DROPPED":               "bg-red-500/10 text-red-400 border-red-500/25",
 };
 const DEFAULT_PILL = "bg-[#eff6ff] text-[#64748b] border-[#bfdbfe]/60";
 
@@ -34,10 +53,55 @@ function StagePills({ stages }: { stages: string[] }) {
 
 function getPipelineTrail(p: ProductRow): string[] {
   const stages: string[] = [];
-  for (const entry of p.activityLog) {
-    if (entry.stages) stages.push(...entry.stages);
+  const fc = p.factoryComm;
+  const gw = p.goldenWorkflow;
+  const od = p.orderDecision;
+  const v = p.sampleVersion ?? 1;
+
+  if (!p.npdReport) { stages.push("NPD TESTING: PENDING"); return stages; }
+  stages.push(p.npdReport.outcome === "Pass" ? "NPD TESTING: PASS" : "NPD TESTING: FAIL");
+
+  if (p.status === "Rejected" || p.status === "Archived") { stages.push("REJECTED"); return stages; }
+
+  if (p.status === "On hold" || (v > 1 && fc && !gw)) {
+    stages.push("EMAILED TO FACTORY");
+    stages.push("REVISED SAMPLE REQUESTED");
+    const sampleReceived = !!fc?.improvementSampleReceivedAt;
+    if (!sampleReceived) { stages.push("REVISED SAMPLE PENDING"); }
+    else if (p.npdReport && v > 1) { stages.push("REVISED SAMPLE RECEIVED"); stages.push(p.npdReport.outcome === "Pass" ? "REVISED TESTING: PASS" : "REVISED TESTING: FAIL"); }
+    else { stages.push("REVISED SAMPLE RECEIVED"); }
+    return stages;
   }
-  return stages.length > 0 ? stages : ["EMAILED TO FACTORY"];
+
+  if (v > 1 && fc && p.status === "Pending NPD") {
+    stages.push("EMAILED TO FACTORY");
+    stages.push("REVISED SAMPLE REQUESTED");
+    stages.push("REVISED SAMPLE RECEIVED");
+    stages.push("REVISED TESTING: PENDING");
+    return stages;
+  }
+
+  if (p.status === "Approved" || p.status === "Pending NPD" || p.status === "Pending Decision") {
+    if (fc?.replyReceivedAt) { stages.push("EMAILED TO FACTORY"); stages.push("REVISED SAMPLE REQUESTED"); stages.push("REVISED SAMPLE RECEIVED"); }
+    if (!gw?.purchaseNotifiedAt) { stages.push(p.status === "Pending Decision" ? "DECISION PENDING" : "GOLDEN SAMPLES PENDING"); return stages; }
+    stages.push("PURCHASE TEAM NOTIFIED");
+    if (gw.orderConfirmedAt) stages.push("ORDER CONFIRMED");
+    if (gw.details) stages.push("PRODUCT DETAILS SAVED");
+    if (gw.details?.bomConfirmedAt) stages.push("BOM CONFIRMED");
+    const compTracks = gw.compliance?.tracks ?? [];
+    if (compTracks.length > 0) stages.push(compTracks.every((t) => t.confirmedAt) ? "COMPLIANCE CONFIRMED" : "COMPLIANCE INITIATED");
+    if (gw.packaging?.kldEmailedToDesignerAt) stages.push("PACKAGING RELEASED");
+    else if (gw.packaging) stages.push("PACKAGING INITIATED");
+    const gs = gw.goldenSample;
+    if (gs?.status === "Received") stages.push("GOLDEN SAMPLE RECEIVED");
+    else if (gs?.status === "In progress" || gs?.status === "Requested") stages.push("GOLDEN SAMPLE TRACKING STARTED");
+    if (od?.state === "placed") stages.push("ORDER PLACED");
+    else if (od?.state === "held") stages.push("ORDER HELD");
+    else if (od?.state === "dropped") stages.push("ORDER DROPPED");
+    return stages;
+  }
+
+  return stages.length > 0 ? stages : ["NPD TESTING: PENDING"];
 }
 
 function fmt(v: string | null) {

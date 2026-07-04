@@ -9,6 +9,7 @@ import { getSession, Session } from "@/lib/auth";
 import { useToast } from "@/components/Toast";
 import { GridBeam } from "@/components/ui/grid-beam";
 import { ChevronDown, ChevronUp, X } from "lucide-react";
+import { api, apiErrorMessage } from "@/lib/api";
 
 // ─── constants ────────────────────────────────────────────────────────────────
 
@@ -29,15 +30,35 @@ const HOLD_STATUS_STYLE: Record<HoldStatus, string> = {
 };
 
 const STAGE_PILL_STYLE: Record<string, string> = {
-  "NPD TESTING: PASS":        "bg-green-500/15 text-green-400 border-green-500/30",
-  "NPD TESTING: FAIL":        "bg-red-500/15 text-red-400 border-red-500/30",
-  "EMAILED TO FACTORY":       "bg-[#eff6ff] text-[#3b82f6] border-[#93c5fd]/40",
-  "IMPROVEMENT REQUIREMENT":  "bg-amber-500/10 text-amber-400 border-amber-500/30",
-  "REVISED SAMPLE REQUESTED": "bg-[#eff6ff] text-[#3b82f6] border-[#93c5fd]/40",
-  "REVISED SAMPLE PENDING":   "bg-amber-500/10 text-amber-400 border-amber-500/30",
-  "REVISED SAMPLE RECEIVED":  "bg-[#eff6ff] text-[#0ea5e9] border-[#0ea5e9]/25",
-  "REJECTED":                 "bg-red-500/10 text-red-400 border-red-500/25",
-  "ORDER PLACED":             "bg-green-500/15 text-green-400 border-green-500/30",
+  "NPD TESTING: PENDING":    "bg-[#eff6ff] text-[#64748b] border-[#bfdbfe]/60",
+  "NPD TESTING: PASS":       "bg-green-500/15 text-green-400 border-green-500/30",
+  "NPD TESTING: FAIL":       "bg-red-500/15 text-red-400 border-red-500/30",
+  "EMAILED TO FACTORY":      "bg-[#eff6ff] text-[#3b82f6] border-[#93c5fd]/40",
+  "IMPROVEMENT REQUIREMENT": "bg-amber-500/10 text-amber-400 border-amber-500/30",
+  "DECISION PENDING":        "bg-amber-500/10 text-amber-500 border-amber-500/30",
+  "GOLDEN SAMPLES PENDING":  "bg-purple-500/10 text-purple-400 border-purple-500/25",
+  "REVISED SAMPLE REQUESTED":"bg-[#eff6ff] text-[#3b82f6] border-[#93c5fd]/40",
+  "REVISED SAMPLE PENDING":  "bg-amber-500/10 text-amber-400 border-amber-500/30",
+  "REVISED SAMPLE RECEIVED": "bg-[#eff6ff] text-[#0ea5e9] border-[#0ea5e9]/25",
+  "REVISED TESTING: PENDING":"bg-orange-500/10 text-orange-400 border-orange-500/25",
+  "REVISED TESTING: PASS":   "bg-green-500/15 text-green-400 border-green-500/30",
+  "REVISED TESTING: FAIL":   "bg-red-500/15 text-red-400 border-red-500/30",
+  "FACTORY DENIED IMPROVEMENT":"bg-red-500/10 text-red-400 border-red-500/25",
+  "PRODUCT DROPPED":         "bg-red-900/20 text-red-500 border-red-800/40",
+  "REJECTED":                "bg-red-500/10 text-red-400 border-red-500/25",
+  "PURCHASE TEAM NOTIFIED":  "bg-[#eff6ff] text-[#0ea5e9] border-[#0ea5e9]/25",
+  "ORDER CONFIRMED":         "bg-[#eff6ff] text-[#0ea5e9] border-[#0ea5e9]/40",
+  "PRODUCT DETAILS SAVED":   "bg-purple-500/10 text-purple-400 border-purple-500/25",
+  "BOM CONFIRMED":           "bg-purple-500/15 text-purple-300 border-purple-500/35",
+  "COMPLIANCE INITIATED":    "bg-amber-500/10 text-amber-400 border-amber-500/30",
+  "COMPLIANCE CONFIRMED":    "bg-green-500/15 text-green-400 border-green-500/30",
+  "PACKAGING INITIATED":     "bg-[#eff6ff] text-[#3b82f6] border-[#93c5fd]/40",
+  "PACKAGING RELEASED":      "bg-green-500/10 text-green-300 border-green-500/25",
+  "GOLDEN SAMPLE TRACKING STARTED": "bg-amber-500/10 text-amber-400 border-amber-500/25",
+  "GOLDEN SAMPLE RECEIVED":  "bg-green-500/20 text-green-300 border-green-400/40",
+  "ORDER PLACED":            "bg-green-500/15 text-green-400 border-green-500/30",
+  "ORDER HELD":              "bg-amber-500/10 text-amber-400 border-amber-500/25",
+  "ORDER DROPPED":           "bg-red-500/10 text-red-400 border-red-500/25",
 };
 const DEFAULT_PILL = "bg-[#eff6ff] text-[#64748b] border-[#bfdbfe]/60";
 
@@ -55,11 +76,55 @@ function StagePills({ stages }: { stages: string[] }) {
 
 function getPipelineTrail(p: ProductRow): string[] {
   const stages: string[] = [];
-  for (const entry of p.activityLog) {
-    if (entry.stages) stages.push(...entry.stages);
+  const fc = p.factoryComm;
+  const gw = p.goldenWorkflow;
+  const od = p.orderDecision;
+  const v = p.sampleVersion ?? 1;
+
+  if (!p.npdReport) { stages.push("NPD TESTING: PENDING"); return stages; }
+  stages.push(p.npdReport.outcome === "Pass" ? "NPD TESTING: PASS" : "NPD TESTING: FAIL");
+
+  if (p.status === "Rejected" || p.status === "Archived") { stages.push("REJECTED"); return stages; }
+
+  if (p.status === "On hold" || (v > 1 && fc && !gw)) {
+    stages.push("EMAILED TO FACTORY");
+    stages.push("REVISED SAMPLE REQUESTED");
+    const sampleReceived = !!fc?.improvementSampleReceivedAt;
+    if (!sampleReceived) { stages.push("REVISED SAMPLE PENDING"); }
+    else { stages.push("REVISED SAMPLE RECEIVED"); stages.push(p.npdReport.outcome === "Pass" ? "REVISED TESTING: PASS" : "REVISED TESTING: FAIL"); }
+    return stages;
   }
-  if (stages.length === 0) stages.push("NPD TESTING: PENDING");
-  return stages;
+
+  if (v > 1 && fc && p.status === "Pending NPD") {
+    stages.push("EMAILED TO FACTORY"); stages.push("REVISED SAMPLE REQUESTED");
+    stages.push("REVISED SAMPLE RECEIVED"); stages.push("REVISED TESTING: PENDING");
+    return stages;
+  }
+
+  if (p.status === "Approved" || p.status === "Pending NPD" || p.status === "Pending Decision") {
+    if (fc?.replyReceivedAt) { stages.push("EMAILED TO FACTORY"); stages.push("REVISED SAMPLE REQUESTED"); stages.push("REVISED SAMPLE RECEIVED"); }
+    if (!gw?.purchaseNotifiedAt) {
+      stages.push(p.status === "Pending Decision" ? "DECISION PENDING" : "GOLDEN SAMPLES PENDING");
+      return stages;
+    }
+    stages.push("PURCHASE TEAM NOTIFIED");
+    if (gw.orderConfirmedAt) stages.push("ORDER CONFIRMED");
+    if (gw.details) stages.push("PRODUCT DETAILS SAVED");
+    if (gw.details?.bomConfirmedAt) stages.push("BOM CONFIRMED");
+    const compTracks = gw.compliance?.tracks ?? [];
+    if (compTracks.length > 0) stages.push(compTracks.every((t) => t.confirmedAt) ? "COMPLIANCE CONFIRMED" : "COMPLIANCE INITIATED");
+    if (gw.packaging?.kldEmailedToDesignerAt) stages.push("PACKAGING RELEASED");
+    else if (gw.packaging) stages.push("PACKAGING INITIATED");
+    const gs = gw.goldenSample;
+    if (gs?.status === "Received") stages.push("GOLDEN SAMPLE RECEIVED");
+    else if (gs?.status === "In progress" || gs?.status === "Requested") stages.push("GOLDEN SAMPLE TRACKING STARTED");
+    if (od?.state === "placed") stages.push("ORDER PLACED");
+    else if (od?.state === "held") stages.push("ORDER HELD");
+    else if (od?.state === "dropped") stages.push("ORDER DROPPED");
+    return stages;
+  }
+
+  return stages.length ? stages : ["NPD TESTING: PENDING"];
 }
 
 function fmt(value: string | null) {
@@ -319,7 +384,7 @@ interface ColorRow { color: string; quantity: string }
 interface VerdictState { type: VerdictType; remarks: string; colors: ColorRow[]; improvement: boolean; improvementNotes: string }
 
 export function OnHoldBody() {
-  const { products, setProducts, addNotification, search } = useProducts();
+  const { products, setProducts, addNotification, refreshProducts, search } = useProducts();
   const { showToast } = useToast();
   const [session, setSession] = useState<Session | null>(null);
   const [formId, setFormId] = useState<number | null>(null);
@@ -341,7 +406,8 @@ export function OnHoldBody() {
   function openVerdict(id: number, type: VerdictType) {
     setVerdict((prev) => {
       if (prev[id]?.type === type) { const n = { ...prev }; delete n[id]; return n; }
-      return { ...prev, [id]: { type, remarks: "", colors: [{ color: "", quantity: "" }], improvement: false, improvementNotes: "" } };
+      // "order" type: improvement is always required from On Hold
+      return { ...prev, [id]: { type, remarks: "", colors: [{ color: "", quantity: "" }], improvement: type === "order" ? true : false, improvementNotes: "" } };
     });
   }
 
@@ -349,38 +415,27 @@ export function OnHoldBody() {
     setVerdict((prev) => ({ ...prev, [id]: { ...prev[id], colors } }));
   }
 
-  function confirmVerdict(p: ProductRow) {
+  async function confirmVerdict(p: ProductRow) {
     const v = verdict[p.id]; if (!v) return;
     const now = new Date().toISOString();
     const remarks = v.remarks.trim() || undefined;
 
     if (v.type === "order") {
-      const code = "AP-" + Math.random().toString(36).slice(2, 5).toUpperCase();
       const validColors = v.colors.filter((c) => c.color.trim()).map((c) => ({ color: c.color.trim(), quantity: parseInt(c.quantity) || 0 }));
-      setProducts((prev) => prev.map((x) => x.id !== p.id ? x : {
-        ...x,
-        status: "Approved" as Status,
-        statusChangedAt: now,
-        orderDecision: { state: "placed", internalCode: code, decidedAt: now, decidedBy: session?.name ?? null, colors: validColors, improvedGoldenSampleExpected: v.improvement, improvementNotes: v.improvementNotes.trim() || undefined },
-        goldenWorkflow: {
-          purchaseNotifiedAt: now,
-          orderConfirmedAt: now,
-          purchaseLog: [{ action: `Order placed (${code}) — ${validColors.map((c) => `${c.color} ×${c.quantity}`).join(", ")}`, timestamp: now }],
-          details: null,
-          compliance: null,
-          packaging: null,
-          goldenSample: { status: "Requested", expectedDate: "", receivedAt: null, approvedAt: null, improvementFixed: null, improvementFixedAt: null, improvementFixedNotes: null, log: [{ action: "Golden sample requested", timestamp: now }] },
-          improvedGoldenSampleExpected: v.improvement,
-        },
-        activityLog: [...x.activityLog, {
-          action: `Order placed (${code}) — ${validColors.length} colour${validColors.length !== 1 ? "s" : ""} · moving to Golden Sample${remarks ? ` · ${remarks}` : ""}`,
-          timestamp: now,
-          note: remarks,
-          stages: v.improvement ? ["ORDER PLACED", "IMPROVEMENT REQUIREMENT"] : ["ORDER PLACED"],
-        }],
-      }));
-      addNotification({ targetRoles: ["CEO", "Dev", "Sales"], productId: p.id, productName: p.codeName, message: `${p.codeName} — order placed (${code}). Golden sample tracking started.` });
-      showToast(`${p.codeName} — order placed, golden sample started`);
+      try {
+        await api.products.placeOrderFromHold(p.id, {
+          colors: validColors,
+          improvement_notes: v.improvementNotes.trim(),
+          remarks: remarks,
+        }, p.version);
+        await refreshProducts();
+        addNotification({ targetRoles: ["CEO", "Dev", "Sales"], productId: p.id, productName: p.codeName, message: `${p.codeName} — order placed from On Hold. Improvement sample required.` });
+        showToast(`${p.codeName} — order placed, golden sample started`);
+      } catch (err: unknown) {
+        const { message, isConflict } = apiErrorMessage(err);
+        if (isConflict) await refreshProducts();
+        showToast(isConflict ? message : `Error: ${message}`);
+      }
     } else if (v.type === "approved") {
       const code = "AP-" + Math.random().toString(36).slice(2, 5).toUpperCase();
       const improvementNotes = v.improvementNotes.trim() || undefined;
@@ -398,12 +453,16 @@ export function OnHoldBody() {
       addNotification({ targetRoles: ["CEO", "Dev", "Sales"], productId: p.id, productName: p.codeName, message: `${p.codeName} approved — awaiting order.` });
       showToast(`${p.codeName} approved`);
     } else {
-      setProducts((prev) => prev.map((x) => x.id !== p.id ? x : {
-        ...x, status: "Rejected" as Status, statusChangedAt: now,
-        activityLog: [...x.activityLog, { action: `Rejected from On Hold${remarks ? ` · ${remarks}` : ""}`, timestamp: now, note: remarks, stages: ["REJECTED"] }],
-      }));
-      addNotification({ targetRoles: ["CEO"], productId: p.id, productName: p.codeName, message: `${p.codeName} rejected — CEO review needed.` });
-      showToast(`${p.codeName} sent to Rejected`);
+      try {
+        await api.products.rejectFromHold(p.id, remarks, p.version);
+        await refreshProducts();
+        addNotification({ targetRoles: ["CEO"], productId: p.id, productName: p.codeName, message: `${p.codeName} rejected from On Hold — CEO review needed.` });
+        showToast(`${p.codeName} sent to Rejected`);
+      } catch (err: unknown) {
+        const { message, isConflict } = apiErrorMessage(err);
+        if (isConflict) await refreshProducts();
+        showToast(isConflict ? message : `Error: ${message}`);
+      }
     }
     setVerdict((prev) => { const n = { ...prev }; delete n[p.id]; return n; });
   }
@@ -423,35 +482,23 @@ export function OnHoldBody() {
               <tr className="border-b border-[#bfdbfe]/40 text-[#0f172a]">
                 <th className="pl-4 pr-2 py-3 w-14" />
                 <th className="px-4 py-3 font-medium">
-                  Product
-                  <p className="text-[10px] font-normal text-[#94a3b8] mt-0.5">Code name · Factory</p>
+                  Product Name
+                </th>
+                <th className="px-4 py-3 font-medium w-56">
+                  Remarks
                 </th>
                 <th className="px-4 py-3 font-medium">
-                  Factory Response
-                  <p className="text-[10px] font-normal text-[#94a3b8] mt-0.5">Current hold status</p>
+                  Product Stages
                 </th>
                 <th className="px-4 py-3 font-medium">
-                  Sample
-                  <p className="text-[10px] font-normal text-[#94a3b8] mt-0.5">Factory sample</p>
-                </th>
-                <th className="px-4 py-3 font-medium">
-                  Stages
-                  <p className="text-[10px] font-normal text-[#94a3b8] mt-0.5">Pipeline trail</p>
-                </th>
-                <th className="px-4 py-3 font-medium">
-                  Last updated
-                  <p className="text-[10px] font-normal text-[#94a3b8] mt-0.5">When status changed</p>
+                  Status Last updated
                 </th>
                 {!isReadOnly && (
                   <th className="px-4 py-3 font-medium">
-                    Verdict
-                    <p className="text-[10px] font-normal text-[#94a3b8] mt-0.5">Move forward</p>
+                    Product Verdict
                   </th>
                 )}
-                <th className="px-4 py-3 text-right font-medium whitespace-nowrap">
-                  Deadline
-                  <p className="text-[10px] font-normal text-[#94a3b8] mt-0.5">Target date</p>
-                </th>
+
               </tr>
             </thead>
             <tbody>
@@ -464,11 +511,7 @@ export function OnHoldBody() {
                 </tr>
               ) : (
                 visible.map((p) => {
-                  const statusLog = p.factoryComm?.holdStatusLog ?? [];
-                  const hs = statusLog.length > 0 ? statusLog[statusLog.length - 1].status : undefined;
                   const v = verdict[p.id] ?? null;
-                  const sampleReceived = p.factoryComm?.factorySampleReceived;
-                  const sampleDate = p.factoryComm?.factorySampleDate;
 
                   return (
                     <>
@@ -496,27 +539,27 @@ export function OnHoldBody() {
                           <p className="text-xs text-[#64748b] mt-0.5">{p.factory ?? p.skuCode}</p>
                         </td>
 
-                        {/* Factory response */}
-                        <td className="px-4 py-3">
-                          {hs ? (
-                            <span className={`inline-block rounded border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap ${HOLD_STATUS_STYLE[hs]}`}>
-                              {hs}
-                            </span>
-                          ) : (
-                            <span className="text-xs text-[#94a3b8]">No update yet</span>
-                          )}
-                        </td>
-
-                        {/* Sample */}
-                        <td className="px-4 py-3">
-                          {sampleReceived ? (
-                            <div>
-                              <span className="inline-block rounded-full bg-green-500/15 px-2 py-0.5 text-[11px] font-semibold text-green-500">Received</span>
-                              {sampleDate && <p className="text-[11px] text-[#94a3b8] mt-0.5">{new Date(sampleDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</p>}
-                            </div>
-                          ) : (
-                            <span className="text-xs text-[#94a3b8]">Pending</span>
-                          )}
+                        {/* Remarks */}
+                        <td className="px-4 py-3 w-56">
+                          {(() => {
+                            const entries: { label: string; text: string }[] = [];
+                            if (p.npdReport?.notes) entries.push({ label: "NPD notes", text: p.npdReport.notes });
+                            if (p.verdictRemarks) entries.push({ label: "Observations", text: p.verdictRemarks });
+                            if (p.factoryComm?.replyText) entries.push({ label: "Factory reply", text: p.factoryComm.replyText });
+                            if (p.factoryComm?.internalDecisionNotes) entries.push({ label: "Internal notes", text: p.factoryComm.internalDecisionNotes });
+                            if (p.orderDecision?.improvementNotes) entries.push({ label: "Improvement req.", text: p.orderDecision.improvementNotes });
+                            if (entries.length === 0) return <span className="text-xs text-[#94a3b8]">—</span>;
+                            return (
+                              <div className="space-y-1">
+                                {entries.map((e, i) => (
+                                  <div key={i}>
+                                    <p className="text-[10px] font-semibold uppercase tracking-wide text-[#94a3b8]">{e.label}</p>
+                                    <p className="text-xs text-[#475569] italic leading-snug break-words">"{e.text}"</p>
+                                  </div>
+                                ))}
+                              </div>
+                            );
+                          })()}
                         </td>
 
                         {/* Stages */}
@@ -546,16 +589,7 @@ export function OnHoldBody() {
                             </div>
                           </td>
                         )}
-
-                        {/* Deadline */}
-                        <td className="px-4 py-3 text-right whitespace-nowrap">
-                          <div className="flex items-center justify-end gap-2">
-                            <DeadlineBadge deadline={p.deadline} />
-                            <span className="tabular-nums text-[#d97706] text-xs">
-                              {new Date(p.deadline).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-                            </span>
-                          </div>
-                        </td>
+                        
                       </tr>
 
                       {/* Verdict sub-row */}
@@ -618,29 +652,17 @@ export function OnHoldBody() {
                                   className="w-full rounded-md border border-[#bfdbfe]/50 bg-white px-3 py-2 text-sm text-[#0f172a] outline-none focus:border-green-400 placeholder:text-[#94a3b8] resize-none"
                                 />
 
-                                {/* Improvement requirement — only when moving from On Hold to Approved */}
-                                <div className="rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2.5">
-                                  <label className="flex items-center gap-3 cursor-pointer">
-                                    <input
-                                      type="checkbox"
-                                      checked={v.improvement}
-                                      onChange={(e) => setVerdict((prev) => ({ ...prev, [p.id]: { ...prev[p.id], improvement: e.target.checked } }))}
-                                      className="h-4 w-4 rounded accent-amber-400"
-                                    />
-                                    <div>
-                                      <p className="text-xs font-medium text-amber-400">Improvement requirement</p>
-                                      <p className="text-[11px] text-amber-500/60">Factory must implement improvements before golden sample is accepted</p>
-                                    </div>
-                                  </label>
-                                  {v.improvement && (
-                                    <textarea
-                                      value={v.improvementNotes}
-                                      onChange={(e) => setVerdict((prev) => ({ ...prev, [p.id]: { ...prev[p.id], improvementNotes: e.target.value } }))}
-                                      placeholder="Describe the required improvements…"
-                                      rows={2}
-                                      className="mt-2 w-full rounded-md border border-amber-500/30 bg-white px-3 py-2 text-sm text-[#0f172a] outline-none focus:border-amber-400 placeholder:text-[#94a3b8] resize-none"
-                                    />
-                                  )}
+                                {/* Improvement notes — always required when placing order from On Hold */}
+                                <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-3">
+                                  <p className="text-xs font-semibold text-amber-500 mb-1">Improvement requirement <span className="text-red-400">*</span></p>
+                                  <p className="text-[11px] text-amber-500/70 mb-2">Required — factory must implement improvements before the golden sample is accepted</p>
+                                  <textarea
+                                    value={v.improvementNotes}
+                                    onChange={(e) => setVerdict((prev) => ({ ...prev, [p.id]: { ...prev[p.id], improvementNotes: e.target.value } }))}
+                                    placeholder="Describe the required improvements…"
+                                    rows={2}
+                                    className="w-full rounded-md border border-amber-500/30 bg-white px-3 py-2 text-sm text-[#0f172a] outline-none focus:border-amber-400 placeholder:text-[#94a3b8] resize-none"
+                                  />
                                 </div>
 
                                 <div className="flex gap-2 justify-end">
@@ -650,7 +672,7 @@ export function OnHoldBody() {
                                   </button>
                                   <button
                                     onClick={() => confirmVerdict(p)}
-                                    disabled={!v.colors.some((c) => c.color.trim())}
+                                    disabled={!v.colors.some((c) => c.color.trim()) || !v.improvementNotes.trim()}
                                     className="rounded-md border border-green-500/40 bg-green-500/20 px-4 py-1.5 text-xs font-semibold text-green-400 hover:bg-green-500/30 disabled:opacity-40 transition"
                                   >
                                     Confirm Order → Golden Sample

@@ -39,14 +39,55 @@ const DEFAULT_PILL = "bg-[#eff6ff] text-[#64748b] border-[#bfdbfe]/60";
 
 function getPipelineTrail(p: ProductRow): string[] {
   const stages: string[] = [];
-  for (const entry of p.activityLog) {
-    if (entry.stages) stages.push(...entry.stages);
+  const fc = p.factoryComm;
+  const gw = p.goldenWorkflow;
+  const od = p.orderDecision;
+  const v = p.sampleVersion ?? 1;
+
+  if (!p.npdReport) { stages.push("NPD TESTING: PENDING"); return stages; }
+  stages.push(p.npdReport.outcome === "Pass" ? "NPD TESTING: PASS" : "NPD TESTING: FAIL");
+
+  if (p.status === "Rejected" || p.status === "Archived") { stages.push("REJECTED"); return stages; }
+
+  if (p.status === "On hold" || (v > 1 && fc && !gw)) {
+    stages.push("EMAILED TO FACTORY");
+    stages.push("REVISED SAMPLE REQUESTED");
+    const sampleReceived = !!fc?.improvementSampleReceivedAt;
+    if (!sampleReceived) { stages.push("REVISED SAMPLE PENDING"); }
+    else if (p.npdReport && v > 1) { stages.push("REVISED SAMPLE RECEIVED"); stages.push(p.npdReport.outcome === "Pass" ? "REVISED TESTING: PASS" : "REVISED TESTING: FAIL"); }
+    else { stages.push("REVISED SAMPLE RECEIVED"); }
+    return stages;
   }
-  if (stages.length === 0) {
-    if (p.npdReport) stages.push(p.npdReport.outcome === "Pass" ? "NPD TESTING: PASS" : "NPD TESTING: FAIL");
-    else stages.push("NPD TESTING: PENDING");
+
+  if (v > 1 && fc && p.status === "Pending NPD") {
+    stages.push("EMAILED TO FACTORY");
+    stages.push("REVISED SAMPLE REQUESTED");
+    stages.push("REVISED SAMPLE RECEIVED");
+    stages.push("REVISED TESTING: PENDING");
+    return stages;
   }
-  return stages;
+
+  if (p.status === "Approved" || p.status === "Pending NPD" || p.status === "Pending Decision") {
+    if (fc?.replyReceivedAt) { stages.push("EMAILED TO FACTORY"); stages.push("REVISED SAMPLE REQUESTED"); stages.push("REVISED SAMPLE RECEIVED"); }
+    if (!gw?.purchaseNotifiedAt) { stages.push(p.status === "Pending Decision" ? "DECISION PENDING" : "GOLDEN SAMPLES PENDING"); return stages; }
+    stages.push("PURCHASE TEAM NOTIFIED");
+    if (gw.orderConfirmedAt) stages.push("ORDER CONFIRMED");
+    if (gw.details) stages.push("PRODUCT DETAILS SAVED");
+    if (gw.details?.bomConfirmedAt) stages.push("BOM CONFIRMED");
+    const compTracks = gw.compliance?.tracks ?? [];
+    if (compTracks.length > 0) stages.push(compTracks.every((t) => t.confirmedAt) ? "COMPLIANCE CONFIRMED" : "COMPLIANCE INITIATED");
+    if (gw.packaging?.kldEmailedToDesignerAt) stages.push("PACKAGING RELEASED");
+    else if (gw.packaging) stages.push("PACKAGING INITIATED");
+    const gs = gw.goldenSample;
+    if (gs?.status === "Received") stages.push("GOLDEN SAMPLE RECEIVED");
+    else if (gs?.status === "In progress" || gs?.status === "Requested") stages.push("GOLDEN SAMPLE TRACKING STARTED");
+    if (od?.state === "placed") stages.push("ORDER PLACED");
+    else if (od?.state === "held") stages.push("ORDER HELD");
+    else if (od?.state === "dropped") stages.push("ORDER DROPPED");
+    return stages;
+  }
+
+  return stages.length > 0 ? stages : ["NPD TESTING: PENDING"];
 }
 
 function RemarkBlock({ label, text, color }: { label: string; text: string; color: string }) {
