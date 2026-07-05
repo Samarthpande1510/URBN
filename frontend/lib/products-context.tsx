@@ -497,9 +497,6 @@ export function ProductsProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(id);
   }, [refreshProducts]);
 
-  // Track which notification IDs have been read (in-memory only, resets on refresh is fine)
-  const [readIds, setReadIds] = useState<Set<string>>(new Set());
-
   const refreshNotifications = useCallback(async () => {
     try {
       const data = await api.notifications.list();
@@ -510,12 +507,12 @@ export function ProductsProvider({ children }: { children: ReactNode }) {
         productName: n.product_name as string,
         message: n.message as string,
         createdAt: n.created_at as string,
-        read: readIds.has(String(n.id)),
+        read: false, // read state managed in NotificationBell via localStorage
       })));
     } catch {
       // not logged in yet
     }
-  }, [readIds]);
+  }, []);
 
   useEffect(() => {
     refreshNotifications();
@@ -532,13 +529,10 @@ export function ProductsProvider({ children }: { children: ReactNode }) {
   }
 
   function markNotificationRead(id: string) {
-    setReadIds((prev) => new Set([...prev, id]));
     setNotifications((prev) => prev.map((n) => n.id === id ? { ...n, read: true } : n));
   }
 
   function markAllNotificationsRead(role: Role) {
-    const matching = notifications.filter((n) => n.targetRoles.includes(role)).map((n) => n.id);
-    setReadIds((prev) => new Set([...prev, ...matching]));
     setNotifications((prev) => prev.map((n) => n.targetRoles.includes(role) ? { ...n, read: true } : n));
   }
 
