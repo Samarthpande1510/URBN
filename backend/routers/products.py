@@ -1,10 +1,11 @@
 import json
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import Optional
 from database import get_db
+from email_service import send_rejection_email
 from models import (
     Product, ActivityLog, NpdReport, FactoryComm,
     FactoryCommEdit, GoldenWorkflow, GoldenSampleTrack, Notification, OrderDecision,
@@ -16,6 +17,28 @@ from models import User
 router = APIRouter()
 
 NOTIFY_ALL = ["CEO", "Dev", "Purchase"]
+
+
+CEO_NOTIFICATION_EMAIL = "samarthpande68@gmail.com"
+
+def _fire_rejection_email(p, actor, db: Session):
+    """Send rejection email to the CEO notification address."""
+    try:
+        npd = db.query(NpdReport).filter(NpdReport.product_id == p.id).first()
+        send_rejection_email(
+            ceo_email=CEO_NOTIFICATION_EMAIL,
+            ceo_name="Samarth",
+            product_name=p.code_name,
+            factory=p.factory,
+            npd_outcome=npd.outcome if npd else None,
+            npd_notes=npd.notes if npd else None,
+            verdict_remarks=p.verdict_remarks,
+            rejected_by=p.rejected_by or actor.name,
+            rejected_at=p.status_changed_at,
+        )
+        print(f"[email] Rejection email sent for {p.code_name}")
+    except Exception as e:
+        print(f"[email] Rejection email error: {e}")
 
 
 # ── helpers ───────────────────────────────────────────────────────────────
@@ -345,17 +368,13 @@ def submit_npd_report(
         outcome_label = "Pass" if data.outcome == "Pass" else "Fail"
         log(db, product_id, f"Improvement sample NPD submitted — {outcome_label} (v{p.sample_version or 1})", current_user, data.notes)
         push_notification(db, product_id, p.code_name, f"Improvement sample v{p.sample_version or 1} NPD result: {outcome_label} — awaiting internal decision.", ["CEO", "Dev", "Sales", "QA"])
-    elif data.outcome == "Not Pass":
-        p.status = "Rejected"
-        p.status_changed_at = now
-        p.rejected_by = current_user.name
-        log(db, product_id, "NPD report submitted — Not Pass", current_user, data.notes)
-        log(db, product_id, "Archived — failed NPD", current_user)
     else:
+        # Both Pass and Not Pass go to Pending Decision — CEO decides next step
         p.status = "Pending Decision"
         p.status_changed_at = now
-        log(db, product_id, "NPD report submitted — Pass", current_user, data.notes)
-        push_notification(db, product_id, p.code_name, "NPD report passed — awaiting CEO decision.", ["CEO", "Dev"])
+        outcome_label = "Pass" if data.outcome == "Pass" else "Not Pass"
+        log(db, product_id, f"NPD report submitted — {outcome_label}", current_user, data.notes)
+        push_notification(db, product_id, p.code_name, f"NPD result: {outcome_label} — awaiting CEO decision.", ["CEO", "Dev"])
 
     db.commit()
     return {"message": "Report submitted", "status": p.status}
@@ -399,12 +418,17 @@ def ceo_decision(
         log(db, product_id, "CEO decision: On hold", current_user)
     elif data.decision == "Rejected":
         p.rejected_by = current_user.name
+        p.status_changed_at = now
         log(db, product_id, "CEO decision: Rejected", current_user)
         push_notification(db, product_id, p.code_name, "Product rejected by CEO.", NOTIFY_ALL)
     else:
         raise HTTPException(status_code=400, detail="Invalid decision")
 
     db.commit()
+
+    if data.decision == "Rejected":
+        _fire_rejection_email(p, current_user, db)
+
     return {"message": f"Product {data.decision.lower()}", "status": p.status}
 
 
@@ -483,6 +507,7 @@ def reject_from_hold(
     log(db, product_id, f"Rejected from On Hold{f' — {data.remarks}' if data.remarks else ''}", current_user)
     push_notification(db, product_id, p.code_name, f"{p.code_name} rejected from On Hold.", ["CEO", "Dev"])
     db.commit()
+    _fire_rejection_email(p, current_user, db)
     return {"message": "Rejected"}
 
 

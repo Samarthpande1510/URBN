@@ -143,7 +143,8 @@ function getAddedDate(p: ProductRow): string | null {
   return p.activityLog[0]?.timestamp ?? p.statusChangedAt ?? null;
 }
 
-function DeadlineBadge({ deadline }: { deadline: string }) {
+function DeadlineBadge({ deadline }: { deadline?: string | null }) {
+  if (!deadline) return null;
   const days = Math.ceil((new Date(deadline).getTime() - Date.now()) / 86400000);
   if (days < 0)  return <span className="rounded bg-red-500/15 px-2 py-0.5 text-[11px] font-semibold text-red-400">{Math.abs(days)}d overdue</span>;
   if (days <= 3) return <span className="rounded bg-orange-500/15 px-2 py-0.5 text-[11px] font-semibold text-orange-400">{days}d left</span>;

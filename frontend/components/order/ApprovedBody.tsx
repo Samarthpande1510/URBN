@@ -109,7 +109,8 @@ function fmt(v: string | null) {
   return new Date(v).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
-function DeadlineBadge({ deadline }: { deadline: string }) {
+function DeadlineBadge({ deadline }: { deadline?: string | null }) {
+  if (!deadline) return null;
   const days = Math.ceil((new Date(deadline).getTime() - Date.now()) / 86400000);
   if (days < 0)  return <span className="rounded bg-red-500/15 px-2 py-0.5 text-[11px] font-semibold text-red-400">{Math.abs(days)}d overdue</span>;
   if (days <= 3) return <span className="rounded bg-orange-500/15 px-2 py-0.5 text-[11px] font-semibold text-orange-400">{days}d left</span>;
@@ -147,7 +148,6 @@ function PendingRow({ p, canOrder, onAction }: {
           )}
         </p>
         <p className="text-xs text-[#64748b] mt-0.5">{p.factory ?? p.skuCode}</p>
-        <span className="inline-block mt-1 text-[10px] font-mono bg-[#eff6ff] border border-[#93c5fd]/30 text-[#3b82f6] px-1.5 py-0.5 rounded">{od.internalCode}</span>
         {od.improvedGoldenSampleExpected && (
           <span className="ml-1 inline-block mt-1 text-[10px] bg-amber-500/10 border border-amber-500/30 text-amber-400 px-1.5 py-0.5 rounded">Improvement req.</span>
         )}
@@ -228,7 +228,6 @@ function HeldRow({ p, canOrder, onDrop, onReinstate, onPlace }: {
           )}
         </p>
         <p className="text-xs text-[#64748b] mt-0.5">{p.factory ?? p.skuCode}</p>
-        <span className="inline-block mt-1 text-[10px] font-mono bg-[#eff6ff] border border-[#93c5fd]/30 text-[#3b82f6] px-1.5 py-0.5 rounded">{od.internalCode}</span>
       </td>
       <td className="px-4 py-3 w-48 space-y-1.5">
         {p.verdictRemarks && (
@@ -305,7 +304,6 @@ function PlacedRow({ p }: { p: ProductRow }) {
           )}
         </p>
         <p className="text-xs text-[#64748b] mt-0.5">{p.factory ?? p.skuCode}</p>
-        <span className="inline-block mt-1 text-[10px] font-mono bg-[#eff6ff] border border-[#93c5fd]/30 text-[#3b82f6] px-1.5 py-0.5 rounded">{od.internalCode}</span>
       </td>
       <td className="px-4 py-3 w-48">
         {p.verdictRemarks ? (
@@ -379,7 +377,7 @@ export function ApprovedBody({ view = "all" }: { view?: ApprovedView }) {
         await api.golden.notifyPurchase(p.id, p.version + 1);
         await api.golden.confirmOrder(p.id, p.version + 2);
         await refreshProducts();
-        addNotification({ targetRoles: ["CEO", "Dev", "Sales", "QA"], productId: p.id, productName: p.codeName, message: `Order placed for ${p.codeName} (${od.internalCode}) — Golden Sample started.` });
+        addNotification({ targetRoles: ["CEO", "Dev", "Sales", "QA"], productId: p.id, productName: p.codeName, message: `Order placed for ${p.codeName} — Golden Sample started.` });
         showToast("Order placed — Golden Sample started");
       } else if (modal.type === "hold") {
         await api.products.patchOrderDecision(p.id, { state: "held", internal_code: od.internalCode, remarks: modal.remarks.trim() || od.remarks }, p.version);
@@ -596,7 +594,7 @@ export function ApprovedBody({ view = "all" }: { view?: ApprovedView }) {
             <div className="flex items-start justify-between gap-3 border-b border-[#bfdbfe]/30 pb-4 mb-5">
               <div>
                 <p className="font-semibold text-slate-900">{modalProduct.codeName}</p>
-                <p className="text-xs text-[#64748b] mt-0.5">{modalProduct.factory ?? modalProduct.skuCode} · <span className="font-mono text-[#3b82f6]">{modalProduct.orderDecision?.internalCode}</span></p>
+                <p className="text-xs text-[#64748b] mt-0.5">{modalProduct.factory ?? modalProduct.skuCode}</p>
               </div>
               <button onClick={closeModal} className="text-[#94a3b8] hover:text-[#1d4ed8] transition shrink-0"><X size={18} /></button>
             </div>

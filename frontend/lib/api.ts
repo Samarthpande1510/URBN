@@ -177,4 +177,8 @@ export const api = {
     archiveOrder: (productId: number, v?: number) =>
       apiFetch(`/products/${productId}/order-decision/archive`, "POST", undefined, v),
   },
+  notifications: {
+    list: () => apiFetch("/notifications"),
+    dismiss: (id: number) => apiFetch(`/notifications/${id}/dismiss`, "POST"),
+  },
 };

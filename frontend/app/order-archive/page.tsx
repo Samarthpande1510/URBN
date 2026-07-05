@@ -126,7 +126,6 @@ export default function OrderArchivePage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="font-semibold text-[#1d4ed8]">{p.codeName}</p>
-                      <span className="text-[10px] font-mono bg-[#eff6ff] border border-[#93c5fd]/30 text-[#3b82f6] px-1.5 py-0.5 rounded">{od.internalCode}</span>
                       <span className="text-[10px] bg-red-500/10 border border-red-500/25 text-red-400 px-1.5 py-0.5 rounded">DROPPED</span>
                     </div>
                     <p className="text-xs text-[#94a3b8] mt-0.5">
@@ -135,6 +134,24 @@ export default function OrderArchivePage() {
                       {od.decidedAt && <span> · Dropped {fmt(od.decidedAt)}</span>}
                       {od.decidedBy && <span> by {od.decidedBy}</span>}
                     </p>
+                    {(() => {
+                      const entries: { label: string; text: string; color: string }[] = [];
+                      if (p.npdReport?.notes) entries.push({ label: "NPD observations", text: p.npdReport.notes, color: "text-[#1d4ed8]" });
+                      if (p.verdictRemarks) entries.push({ label: "Decision Pending", text: p.verdictRemarks, color: "text-amber-700" });
+                      if (od.improvementNotes) entries.push({ label: "Improvement req.", text: od.improvementNotes, color: "text-amber-600" });
+                      if (od.remarks) entries.push({ label: "Drop remarks", text: od.remarks, color: "text-red-500" });
+                      if (entries.length === 0) return null;
+                      return (
+                        <div className="mt-2 space-y-1.5">
+                          {entries.map((e, i) => (
+                            <div key={i}>
+                              <p className="text-[10px] font-semibold uppercase tracking-wide text-[#94a3b8]">{e.label}</p>
+                              <p className={`text-xs italic leading-snug break-words whitespace-normal ${e.color}`}>"{e.text}"</p>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
                   </div>
                   <Chip color={PRIORITY_DOT[p.priority]} label={p.priority} />
                 </div>

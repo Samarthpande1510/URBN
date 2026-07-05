@@ -19,9 +19,19 @@ class RefreshToken(Base):
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
     token = Column(String, nullable=False)
-    expires_at = Column(DateTime, default=lambda: datetime.utcnow() + timedelta(days=7))
+    device_label = Column(String)                   # e.g. "Chrome · Mac" from User-Agent
+    expires_at = Column(DateTime, default=lambda: datetime.utcnow() + timedelta(days=30))
     revoked = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class LoginAttempt(Base):
+    __tablename__ = "login_attempts"
+    id = Column(Integer, primary_key=True)
+    email = Column(String, nullable=False, index=True)
+    ip_address = Column(String)
+    succeeded = Column(Boolean, nullable=False)
+    attempted_at = Column(DateTime, default=datetime.utcnow)
 
 
 class Product(Base):

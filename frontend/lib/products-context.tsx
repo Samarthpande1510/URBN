@@ -434,6 +434,7 @@ interface ProductsContextValue {
   dismissNotification: (id: string) => void;
   markNotificationRead: (id: string) => void;
   markAllNotificationsRead: (role: Role) => void;
+  refreshNotifications: () => Promise<void>;
   search: string;
   setSearch: (q: string) => void;
 }
@@ -490,20 +491,54 @@ export function ProductsProvider({ children }: { children: ReactNode }) {
     refreshProducts();
   }, [refreshProducts]);
 
+  // Keep all open windows in sync — silent background poll every 20s
+  useEffect(() => {
+    const id = setInterval(() => { refreshProducts(); refreshNotifications(); }, 20_000);
+    return () => clearInterval(id);
+  }, [refreshProducts]);
 
-  function addNotification(n: Omit<AppNotification, "id" | "createdAt" | "read">) {
-    setNotifications((prev) => [{ ...n, id: `${n.productId}-${Date.now()}`, createdAt: new Date().toISOString(), read: false }, ...prev]);
+  // Track which notification IDs have been read (in-memory only, resets on refresh is fine)
+  const [readIds, setReadIds] = useState<Set<string>>(new Set());
+
+  const refreshNotifications = useCallback(async () => {
+    try {
+      const data = await api.notifications.list();
+      setNotifications((data as Record<string, unknown>[]).map((n) => ({
+        id: String(n.id),
+        targetRoles: (n.target_roles as Role[]),
+        productId: n.product_id as number,
+        productName: n.product_name as string,
+        message: n.message as string,
+        createdAt: n.created_at as string,
+        read: readIds.has(String(n.id)),
+      })));
+    } catch {
+      // not logged in yet
+    }
+  }, [readIds]);
+
+  useEffect(() => {
+    refreshNotifications();
+  }, [refreshNotifications]);
+
+  function addNotification(_n: Omit<AppNotification, "id" | "createdAt" | "read">) {
+    // Backend handles persistence — just refresh from DB
+    refreshNotifications();
   }
 
   function dismissNotification(id: string) {
     setNotifications((prev) => prev.filter((n) => n.id !== id));
+    api.notifications.dismiss(Number(id)).catch(() => {});
   }
 
   function markNotificationRead(id: string) {
+    setReadIds((prev) => new Set([...prev, id]));
     setNotifications((prev) => prev.map((n) => n.id === id ? { ...n, read: true } : n));
   }
 
   function markAllNotificationsRead(role: Role) {
+    const matching = notifications.filter((n) => n.targetRoles.includes(role)).map((n) => n.id);
+    setReadIds((prev) => new Set([...prev, ...matching]));
     setNotifications((prev) => prev.map((n) => n.targetRoles.includes(role) ? { ...n, read: true } : n));
   }
 
@@ -533,7 +568,7 @@ export function ProductsProvider({ children }: { children: ReactNode }) {
     <ProductsContext.Provider value={{
       products, setProducts, addProduct, deleteProduct,
       refreshProducts, refreshGolden,
-      notifications, addNotification, dismissNotification, markNotificationRead, markAllNotificationsRead,
+      notifications, addNotification, dismissNotification, markNotificationRead, markAllNotificationsRead, refreshNotifications,
       search, setSearch,
     }}>
       {children}

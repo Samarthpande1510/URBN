@@ -2,19 +2,22 @@ import os
 from datetime import datetime, timedelta, timezone
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from database import get_db
-from models import RefreshToken, User
+from models import RefreshToken, LoginAttempt, User
 
 SECRET_KEY = os.getenv("SECRET_KEY")
 if not SECRET_KEY:
     raise RuntimeError("SECRET_KEY not set")
 
 ALGORITHM = "HS256"
-ACCESS_TOKEN_TTL_MINUTES = 60       # longer TTL — no cookie refresh on mobile
+ACCESS_TOKEN_TTL_MINUTES = 60
 REFRESH_TOKEN_TTL_DAYS = 30
+MAX_SESSIONS_PER_USER = 5
+MAX_FAILED_ATTEMPTS = 5
+LOCKOUT_WINDOW_MINUTES = 15
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 bearer_scheme = HTTPBearer()
@@ -35,17 +38,58 @@ def create_access_token(data: dict) -> str:
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 
-def create_refresh_token(data: dict, db: Session) -> str:
+def create_refresh_token(data: dict, db: Session, device_label: str | None = None) -> str:
     payload = data.copy()
     payload["exp"] = datetime.utcnow() + timedelta(days=REFRESH_TOKEN_TTL_DAYS)
     payload["type"] = "refresh"
     encoded = jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+
+    # Enforce session cap: revoke oldest active tokens beyond MAX_SESSIONS_PER_USER - 1
+    active_tokens = (
+        db.query(RefreshToken)
+        .filter(
+            RefreshToken.user_id == data["user_id"],
+            RefreshToken.revoked == False,
+            RefreshToken.expires_at > datetime.utcnow(),
+        )
+        .order_by(RefreshToken.created_at.asc())
+        .all()
+    )
+    overflow = len(active_tokens) - (MAX_SESSIONS_PER_USER - 1)
+    for old_token in active_tokens[:overflow]:
+        old_token.revoked = True
+
     db.add(RefreshToken(
         user_id=data["user_id"],
         token=pwd_context.hash(encoded),
+        device_label=device_label,
     ))
     db.commit()
     return encoded
+
+
+def check_login_rate_limit(email: str, ip: str | None, db: Session):
+    """Raise 429 if too many recent failed attempts for this email."""
+    window_start = datetime.utcnow() - timedelta(minutes=LOCKOUT_WINDOW_MINUTES)
+    recent_failures = (
+        db.query(LoginAttempt)
+        .filter(
+            LoginAttempt.email == email,
+            LoginAttempt.succeeded == False,
+            LoginAttempt.attempted_at >= window_start,
+        )
+        .count()
+    )
+    if recent_failures >= MAX_FAILED_ATTEMPTS:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Too many failed login attempts. Try again in {LOCKOUT_WINDOW_MINUTES} minutes.",
+        )
+
+
+def record_login_attempt(email: str, ip: str | None, succeeded: bool, db: Session):
+    db.add(LoginAttempt(email=email, ip_address=ip, succeeded=succeeded))
+    db.commit()
 
 
 def decode_token(token: str) -> dict | None:

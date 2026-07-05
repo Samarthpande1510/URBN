@@ -19,7 +19,7 @@ const emptyForm = {
   specifications: "",
   sampleReceived: false,
   sampleGivenDate: "",
-  deadline: "",
+  deadline: new Date().toISOString().split("T")[0],
 };
 
   export function Topbar({ onMenuClick }: { onMenuClick: () => void }) {

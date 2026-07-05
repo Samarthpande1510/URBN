@@ -1,10 +1,17 @@
-from fastapi import FastAPI
+from dotenv import load_dotenv
+load_dotenv()
+
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer
+from fastapi.responses import StreamingResponse
+from sse_starlette.sse import EventSourceResponse
 from routers.auth_router import router as auth_router
 from routers.products import router as products_router
 from routers.golden import router as golden_router
 from routers.notifications import router as notifications_router
+from auth import get_current_user
+from sse import keepalive_stream
 
 security = HTTPBearer()
 

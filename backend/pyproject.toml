@@ -14,4 +14,6 @@ dependencies = [
     "pydantic[email]>=2.0.0",
     "sqlalchemy>=2.0.0",
     "uvicorn[standard]>=0.29.0",
+    "sse-starlette>=3.4.5",
+    "resend>=2.32.2",
 ]
