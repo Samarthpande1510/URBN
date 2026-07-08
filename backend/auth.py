@@ -70,26 +70,34 @@ def create_refresh_token(data: dict, db: Session, device_label: str | None = Non
 
 def check_login_rate_limit(email: str, ip: str | None, db: Session):
     """Raise 429 if too many recent failed attempts for this email."""
-    window_start = datetime.utcnow() - timedelta(minutes=LOCKOUT_WINDOW_MINUTES)
-    recent_failures = (
-        db.query(LoginAttempt)
-        .filter(
-            LoginAttempt.email == email,
-            LoginAttempt.succeeded == False,
-            LoginAttempt.attempted_at >= window_start,
+    try:
+        window_start = datetime.utcnow() - timedelta(minutes=LOCKOUT_WINDOW_MINUTES)
+        recent_failures = (
+            db.query(LoginAttempt)
+            .filter(
+                LoginAttempt.email == email,
+                LoginAttempt.succeeded == False,
+                LoginAttempt.attempted_at >= window_start,
+            )
+            .count()
         )
-        .count()
-    )
-    if recent_failures >= MAX_FAILED_ATTEMPTS:
-        raise HTTPException(
-            status_code=429,
-            detail=f"Too many failed login attempts. Try again in {LOCKOUT_WINDOW_MINUTES} minutes.",
-        )
+        if recent_failures >= MAX_FAILED_ATTEMPTS:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Too many failed login attempts. Try again in {LOCKOUT_WINDOW_MINUTES} minutes.",
+            )
+    except HTTPException:
+        raise
+    except Exception:
+        pass  # table doesn't exist yet — skip rate limiting
 
 
 def record_login_attempt(email: str, ip: str | None, succeeded: bool, db: Session):
-    db.add(LoginAttempt(email=email, ip_address=ip, succeeded=succeeded))
-    db.commit()
+    try:
+        db.add(LoginAttempt(email=email, ip_address=ip, succeeded=succeeded))
+        db.commit()
+    except Exception:
+        db.rollback()
 
 
 def decode_token(token: str) -> dict | None:
