@@ -1,0 +1,15 @@
+[Unit]
+Description=URBN Frontend (Next.js)
+After=network.target
+
+[Service]
+Type=simple
+User=samarth
+WorkingDirectory=/home/samarth/URBN/frontend
+ExecStart=/usr/bin/npm start
+Restart=always
+RestartSec=3
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target
