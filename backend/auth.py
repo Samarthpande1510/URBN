@@ -89,7 +89,10 @@ def check_login_rate_limit(email: str, ip: str | None, db: Session):
     except HTTPException:
         raise
     except Exception:
-        pass  # table doesn't exist yet — skip rate limiting
+        try:
+            db.rollback()
+        except Exception:
+            pass
 
 
 def record_login_attempt(email: str, ip: str | None, succeeded: bool, db: Session):
