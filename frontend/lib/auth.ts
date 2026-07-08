@@ -9,7 +9,7 @@ export interface Session {
 const SESSION_KEY = "urbn_session";
 const TOKEN_KEY = "urbn_access_token";
 const REFRESH_KEY = "urbn_refresh_token";
-const API = "http://localhost:8000";
+const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 export function getSession(): Session | null {
   if (typeof window === "undefined") return null;
