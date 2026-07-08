@@ -491,8 +491,11 @@ export function ProductsProvider({ children }: { children: ReactNode }) {
     refreshProducts();
   }, [refreshProducts]);
 
-  // Keep all open windows in sync — silent background poll every 20s
+  // Keep all open windows in sync — silent background poll every 20s (only when logged in)
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    const { getSession } = require("@/lib/auth");
+    if (!getSession()) return;
     const id = setInterval(() => { refreshProducts(); refreshNotifications(); }, 20_000);
     return () => clearInterval(id);
   }, [refreshProducts]);

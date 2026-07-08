@@ -44,6 +44,13 @@ function clearAuth() {
   localStorage.removeItem(REFRESH_KEY);
 }
 
+function extractDetail(detail: unknown, fallback: string): string {
+  if (!detail) return fallback;
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) return detail.map((e) => e?.msg ?? JSON.stringify(e)).join(", ");
+  return fallback;
+}
+
 export async function login(email: string, password: string): Promise<Session> {
   const res = await fetch(`${API}/auth/login`, {
     method: "POST",
@@ -51,7 +58,7 @@ export async function login(email: string, password: string): Promise<Session> {
     body: JSON.stringify({ email, password }),
   });
   const data = await res.json();
-  if (!res.ok) throw new Error(data.detail ?? "Login failed.");
+  if (!res.ok) throw new Error(extractDetail(data.detail, "Login failed."));
   saveSession(data.user, data.access_token, data.refresh_token);
   return getSession()!;
 }
@@ -63,7 +70,7 @@ export async function signup(name: string, email: string, password: string): Pro
     body: JSON.stringify({ name, email, password }),
   });
   const data = await res.json();
-  if (!res.ok) throw new Error(data.detail ?? "Signup failed.");
+  if (!res.ok) throw new Error(extractDetail(data.detail, "Signup failed."));
   saveSession(data.user, data.access_token, data.refresh_token);
   return getSession()!;
 }
