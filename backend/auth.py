@@ -97,7 +97,10 @@ def record_login_attempt(email: str, ip: str | None, succeeded: bool, db: Sessio
         db.add(LoginAttempt(email=email, ip_address=ip, succeeded=succeeded))
         db.commit()
     except Exception:
-        db.rollback()
+        try:
+            db.rollback()
+        except Exception:
+            pass
 
 
 def decode_token(token: str) -> dict | None:
