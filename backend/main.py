@@ -10,6 +10,7 @@ from routers.auth_router import router as auth_router
 from routers.products import router as products_router
 from routers.golden import router as golden_router
 from routers.notifications import router as notifications_router
+from routers.files import router as files_router
 from auth import get_current_user
 from sse import keepalive_stream
 
@@ -33,6 +34,7 @@ app.include_router(auth_router,          prefix="/auth",          tags=["auth"])
 app.include_router(products_router,      prefix="/products",      tags=["products"])
 app.include_router(golden_router,        prefix="/golden",        tags=["golden"])
 app.include_router(notifications_router, prefix="/notifications", tags=["notifications"])
+app.include_router(files_router,         prefix="/files",         tags=["files"])
 
 
 @app.get("/")

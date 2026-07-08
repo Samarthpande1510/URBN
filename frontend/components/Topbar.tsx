@@ -7,6 +7,7 @@ import { useProducts } from "@/lib/products-context";
 import { getSession, Session } from "@/lib/auth";
 import { Menu, Search } from "lucide-react";
 import { NotificationBell } from "./NotificationBell";
+import { uploadFile } from "@/lib/upload";
 
 const PRIORITY_OPTIONS = ["Urgent", "P1 — High", "P2 — Medium", "P3 — Low"];
 
@@ -32,6 +33,7 @@ const emptyForm = {
   const [form, setForm] = useState(emptyForm);
   const [imageName, setImageName] = useState<string | null>(null);
   const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     setSession(getSession());
@@ -43,6 +45,7 @@ const emptyForm = {
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
+    if (uploading) return;
     addProduct({
       productName: form.productName,
       factory: form.factory,
@@ -198,20 +201,27 @@ const emptyForm = {
               type="file"
               accept="image/*"
               className="hidden"
-              onChange={(e) => {
+              onChange={async (e) => {
                 const file = e.target.files?.[0] ?? null;
-                if (file && file.size > 2 * 1024 * 1024) {
-                  alert("Image too large — max 2MB");
+                if (!file) { setImageName(null); setImageDataUrl(null); return; }
+                if (file.size > 10 * 1024 * 1024) {
+                  alert("Image too large — max 10MB");
                   e.target.value = "";
                   return;
                 }
-                setImageName(file?.name ?? null);
-                if (file) {
-                  const reader = new FileReader();
-                  reader.onload = (ev) => setImageDataUrl(ev.target?.result as string ?? null);
-                  reader.readAsDataURL(file);
-                } else {
+                setImageName(file.name);
+                setUploading(true);
+                try {
+                  // compressed to WebP in-browser, stored in R2 — DB only gets the URL
+                  const url = await uploadFile(file, "products");
+                  setImageDataUrl(url);
+                } catch (err) {
+                  alert(err instanceof Error ? err.message : "Upload failed");
+                  setImageName(null);
                   setImageDataUrl(null);
+                  e.target.value = "";
+                } finally {
+                  setUploading(false);
                 }
               }}
             />
@@ -220,7 +230,11 @@ const emptyForm = {
               onClick={() => fileInputRef.current?.click()}
               className="relative w-full overflow-hidden rounded-md border-2 border-dashed border-[#bfdbfe]/50 bg-[#ffffff] text-sm text-[#1d4ed8] hover:bg-[#eff6ff]"
             >
-              {imageDataUrl ? (
+              {uploading ? (
+                <div className="flex flex-col items-center justify-center py-8">
+                  <span className="animate-pulse text-sm">Uploading…</span>
+                </div>
+              ) : imageDataUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={imageDataUrl} alt="preview" className="h-40 w-full object-cover" />
               ) : (
@@ -249,9 +263,10 @@ const emptyForm = {
             </button>
             <button
               type="submit"
-              className="flex-1 rounded-md bg-blue-600 py-2.5 text-sm font-medium text-white hover:bg-blue-700"
+              disabled={uploading}
+              className="flex-1 rounded-md bg-blue-600 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              Add to Intake
+              {uploading ? "Uploading image…" : "Add to Intake"}
             </button>
           </div>
         </form>

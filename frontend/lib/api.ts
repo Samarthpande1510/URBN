@@ -181,4 +181,8 @@ export const api = {
     list: () => apiFetch("/notifications"),
     dismiss: (id: number) => apiFetch(`/notifications/${id}/dismiss`, "POST"),
   },
+  files: {
+    presign: (folder: string, content_type: string) =>
+      apiFetch("/files/presign", "POST", { folder, content_type }),
+  },
 };

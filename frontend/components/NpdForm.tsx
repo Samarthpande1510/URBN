@@ -7,6 +7,7 @@ import { PRIORITY_DOT } from "@/lib/colors";
 import { Chip } from "@/components/Chip";
 import { useToast } from "@/components/Toast";
 import { ChevronDown, ChevronUp, FileText, X, Upload } from "lucide-react";
+import { uploadFile } from "@/lib/upload";
 
 function fmt(value: string | null) {
   if (!value) return null;
@@ -33,6 +34,7 @@ export function NpdForm({ p, onSubmit }: { p: ProductRow; onSubmit?: () => void 
     isImprov ? null : (p.npdReport?.fileName ? { name: p.npdReport.fileName, dataUrl: p.npdReport.fileDataUrl ?? "" } : null)
   );
   const [dragging, setDragging] = useState(false);
+  const [uploadingFile, setUploadingFile] = useState(false);
   const [showLog, setShowLog] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -46,14 +48,21 @@ export function NpdForm({ p, onSubmit }: { p: ProductRow; onSubmit?: () => void 
 
   const MAX_FILE_MB = 5;
 
-  function readFile(f: File) {
+  async function readFile(f: File) {
     if (f.size > MAX_FILE_MB * 1024 * 1024) {
       showToast(`File too large — max ${MAX_FILE_MB}MB`);
       return;
     }
-    const reader = new FileReader();
-    reader.onload = (ev) => setReportFile({ name: f.name, dataUrl: ev.target?.result as string });
-    reader.readAsDataURL(f);
+    setUploadingFile(true);
+    try {
+      // uploaded to R2 — DB only stores the URL
+      const url = await uploadFile(f, "npd");
+      setReportFile({ name: f.name, dataUrl: url });
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setUploadingFile(false);
+    }
   }
 
   function handleDrop(e: DragEvent<HTMLDivElement>) {
@@ -65,7 +74,7 @@ export function NpdForm({ p, onSubmit }: { p: ProductRow; onSubmit?: () => void 
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    if (!outcome) return;
+    if (!outcome || uploadingFile) return;
     try {
       await api.products.submitNpd(p.id, {
         outcome,
@@ -148,7 +157,11 @@ export function NpdForm({ p, onSubmit }: { p: ProductRow; onSubmit?: () => void 
           </label>
           <input ref={fileRef} type="file" accept=".pdf,.xlsx,.xls" className="hidden"
             onChange={(e) => { const f = e.target.files?.[0]; if (f) readFile(f); }} />
-          {reportFile ? (
+          {uploadingFile ? (
+            <div className="flex items-center justify-center rounded-md border border-[#93c5fd]/40 bg-[#eff6ff] px-4 py-6">
+              <p className="animate-pulse text-sm text-[#1d4ed8]">Uploading…</p>
+            </div>
+          ) : reportFile ? (
             <div className="flex items-center gap-3 rounded-md border border-[#93c5fd]/40 bg-[#eff6ff] px-4 py-3">
               <FileText size={20} className="shrink-0 text-[#3b82f6]" />
               <p className="flex-1 min-w-0 text-sm text-[#0f172a] truncate">{reportFile.name}</p>
@@ -176,9 +189,9 @@ export function NpdForm({ p, onSubmit }: { p: ProductRow; onSubmit?: () => void 
           )}
         </div>
 
-        <button type="submit" disabled={!outcome}
+        <button type="submit" disabled={!outcome || uploadingFile}
           className="w-full rounded-md bg-[#2563eb] py-3 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-40 transition">
-          Submit & Send to Decision
+          {uploadingFile ? "Uploading file…" : "Submit & Send to Decision"}
         </button>
       </form>
 
