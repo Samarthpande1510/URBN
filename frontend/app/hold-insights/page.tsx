@@ -6,18 +6,15 @@ import { Modal } from "@/components/Modal";
 import { useProducts, ProductRow, FactoryComm, FactoryReplySummary, InternalDecision, HoldCaseEntry, Status, NpdReport } from "@/lib/products-context";
 import { getSession, Session, Role } from "@/lib/auth";
 import { useToast } from "@/components/Toast";
-import { api, apiErrorMessage } from "@/lib/api";
 import { GridBeam } from "@/components/ui/grid-beam";
-import { X, FileText } from "lucide-react";
+import { X } from "lucide-react";
 
 const ALL_ROLES: Role[] = ["CEO", "Dev", "Sales", "QA"];
 
 type Stage = "Factory Not Responded" | "Factory Decision Pending" | "Internal Decision Pending" | "Resolved";
 
-function computeStage(fc: FactoryComm | undefined, p: ProductRow): Stage {
+function computeStage(fc: FactoryComm | undefined): Stage {
   if (fc?.internalDecision) return "Resolved";
-  // Improvement sample: sample received AND NPD report submitted → internal decision
-  if (fc?.improvementSampleExpected && fc?.improvementSampleReceivedAt && p.status === "On hold" && p.npdReport) return "Internal Decision Pending";
   if (!fc?.replyReceivedAt) return "Factory Not Responded";
   if (fc.replySummary === "Decision Pending" && !fc.partialResolvedAt) return "Factory Decision Pending";
   return "Internal Decision Pending";
@@ -44,51 +41,6 @@ interface HoldCase {
   fc: FactoryComm | undefined;
   source: CaseSource;
   stage: Stage;
-}
-
-function getImprovementPipeline(p: ProductRow): { label: string; done: boolean; active: boolean }[] {
-  const v = p.sampleVersion ?? 1;
-  const fc = p.factoryComm;
-  const received = fc?.improvementSampleReceivedAt;
-  const inNpd = p.status === "Pending NPD";
-  // Only use npdReport as this version's result if the sample was actually received (guards against stale v-1 report showing for v)
-  const vReport = received
-    ? (p.npdReports?.slice().reverse().find((r) => r.version === v) ?? (p.npdReport && !inNpd ? { ...p.npdReport, version: v } : null))
-    : null;
-  const hasResult = !!vReport;
-
-  const steps: { label: string; done: boolean; active: boolean }[] = [];
-
-  steps.push({
-    label: `Sample v${v}: Awaiting Physical Sample`,
-    done: !!received || inNpd || hasResult,
-    active: !received && !inNpd && !hasResult,
-  });
-
-  if (received || inNpd || hasResult) {
-    steps.push({
-      label: `Sample v${v}: Received${received ? ` — ${fmtDate(received)}` : ""}`,
-      done: inNpd || hasResult,
-      active: !!received && !inNpd && !hasResult,
-    });
-    steps.push({
-      label: hasResult
-        ? `Sample v${v}: NPD Testing — ${vReport!.outcome === "Pass" ? "Pass ✓" : "Fail ✕"}`
-        : `Sample v${v}: Awaiting NPD Testing Results`,
-      done: hasResult,
-      active: inNpd && !hasResult,
-    });
-  }
-
-  if (hasResult) {
-    steps.push({
-      label: `Sample v${v}: Internal Decision`,
-      done: false,
-      active: true,
-    });
-  }
-
-  return steps;
 }
 
 function defaultFactoryComm(now: string): FactoryComm {
@@ -128,24 +80,20 @@ const FILTERS: { key: Filter; label: string }[] = [
 ];
 
 export default function HoldInsightsPage() {
-  const { products, setProducts, addNotification, search, refreshProducts } = useProducts();
+  const { products, setProducts, addNotification, search } = useProducts();
   const { showToast } = useToast();
   const [session, setSession] = useState<Session | null>(null);
   const [filter, setFilter] = useState<Filter>("All");
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [reportViewId, setReportViewId] = useState<number | null>(null);
   useEffect(() => { setSession(getSession()); }, []);
 
   const isQA = false;
   const isReadOnly = false;
 
-  // ── Build the unified list of hold cases ──
+  // ── Build the unified list of hold cases (on-hold products + improvement-sample products) ──
   const cases: HoldCase[] = products
     .filter((p) => {
       if (p.status === "On hold") return true;
-      // Improvement sample loop: in NPD Testing or NPD done (stays "On hold") — show in Hold Insights
-      if (p.factoryComm?.improvementSampleExpected && (p.status === "Pending NPD" || p.status === "On hold")) return true;
-      // Golden workflow improvement sample
       if (p.status === "Approved" && p.goldenWorkflow?.improvedGoldenSampleExpected && p.goldenWorkflow.goldenSample?.improvementFixed !== true) return true;
       return false;
     })
@@ -157,7 +105,7 @@ export default function HoldInsightsPage() {
         product: p,
         fc: p.factoryComm,
         source: isImprovementSample ? "Improvement Sample" as CaseSource : "On Hold" as CaseSource,
-        stage: computeStage(p.factoryComm, p),
+        stage: computeStage(p.factoryComm),
       };
     });
 
@@ -192,7 +140,6 @@ export default function HoldInsightsPage() {
     if (!matchesSearch(c)) return false;
     if (filter === "All") return true;
     if (filter === "Improvement Sample") return c.source === "Improvement Sample";
-    // Stage filters include improvement sample products too (they can be in both)
     return c.stage === filter;
   });
 
@@ -231,43 +178,29 @@ export default function HoldInsightsPage() {
 
       <GridBeam rows={6} cols={8} colorVariant="sunset" theme="dark" active className="mt-4 overflow-hidden rounded-md border border-[#bfdbfe]/40 bg-[#ffffff]/80">
         <div className="overflow-x-auto">
-          <table className="min-w-[1600px] w-full text-left text-sm">
+          <table className="min-w-[1000px] w-full text-left text-sm">
             <thead>
               <tr className="border-b border-[#bfdbfe]/40 text-[#0f172a]">
-                <th className="pl-3 pr-1 py-3 w-10 shrink-0" />
-                <th className="pl-2 pr-2 py-3 w-14 shrink-0" />
-                <th className="px-4 py-3 font-medium w-36">Product<p className="text-[10px] font-normal text-[#94a3b8] mt-0.5">Code name · Factory</p></th>
-                <th className="px-4 py-3 font-medium w-40">Remarks<p className="text-[10px] font-normal text-[#94a3b8] mt-0.5">Original feedback</p></th>
-                <th className="px-4 py-3 font-medium w-28">Version<p className="text-[10px] font-normal text-[#94a3b8] mt-0.5">Sample version</p></th>
-                <th className="px-4 py-3 font-medium w-44">Sample Received<p className="text-[10px] font-normal text-[#94a3b8] mt-0.5">Log date &amp; send to NPD</p></th>
-                <th className="px-4 py-3 font-medium w-56">Revised Sample<p className="text-[10px] font-normal text-[#94a3b8] mt-0.5">Improvement sample pipeline</p></th>
-                <th className="px-4 py-3 font-medium w-56">Factory Status<p className="text-[10px] font-normal text-[#94a3b8] mt-0.5">Current status &amp; history</p></th>
-                <th className="px-4 py-3 font-medium w-32 whitespace-nowrap">Expected reply<p className="text-[10px] font-normal text-[#94a3b8] mt-0.5">By when factory should reply</p></th>
-                {filter !== "Improvement Sample" && <>
-                  <th className="px-4 py-3 font-medium w-32 whitespace-nowrap">Last updated<p className="text-[10px] font-normal text-[#94a3b8] mt-0.5">Latest case activity</p></th>
-                  <th className="px-4 py-3 text-right font-medium whitespace-nowrap w-28">Deadline</th>
-                </>}
+                <th className="pl-4 pr-2 py-3 w-14" />
+                <th className="px-4 py-3 font-medium">Product<p className="text-[10px] font-normal text-[#94a3b8] mt-0.5">Code name · Factory</p></th>
+                <th className="px-4 py-3 font-medium">Source<p className="text-[10px] font-normal text-[#94a3b8] mt-0.5">Why it's on hold</p></th>
+                <th className="px-4 py-3 font-medium">Remarks<p className="text-[10px] font-normal text-[#94a3b8] mt-0.5">Original feedback</p></th>
+                <th className="px-4 py-3 font-medium">Improvement Sample Orders<p className="text-[10px] font-normal text-[#94a3b8] mt-0.5">Revised sample &amp; version</p></th>
+                <th className="px-4 py-3 font-medium">Stage<p className="text-[10px] font-normal text-[#94a3b8] mt-0.5">Full history of responses</p></th>
+                <th className="px-4 py-3 font-medium">Expected reply<p className="text-[10px] font-normal text-[#94a3b8] mt-0.5">By when factory should reply</p></th>
+                <th className="px-4 py-3 font-medium">Last updated<p className="text-[10px] font-normal text-[#94a3b8] mt-0.5">Latest case activity</p></th>
+                <th className="px-4 py-3 text-right font-medium whitespace-nowrap">Deadline</th>
               </tr>
             </thead>
             <tbody>
               {visible.length === 0 ? (
-                <tr><td colSpan={filter === "Improvement Sample" ? 9 : 11} className="px-5 py-16 text-center">
+                <tr><td colSpan={7} className="px-5 py-16 text-center">
                   <p className="text-sm text-[#64748b]">No cases match this filter.</p>
                 </td></tr>
               ) : (
                 visible.map(({ product: p, fc, source, stage }) => (
                   <tr key={p.id} onClick={() => setSelectedId(p.id)} className="cursor-pointer border-b border-[#bfdbfe]/20 hover:bg-[#eff6ff] transition">
-                    <td className="pl-3 pr-1 py-3" onClick={(e) => e.stopPropagation()}>
-                      {source === "Improvement Sample" && p.npdReport ? (
-                        <button
-                          onClick={() => setReportViewId(p.id)}
-                          title="View NPD report"
-                          className="flex h-8 w-8 items-center justify-center rounded-md border border-[#bfdbfe]/50 text-[#3b82f6] hover:bg-[#eff6ff] hover:border-[#93c5fd] transition">
-                          <FileText size={14} />
-                        </button>
-                      ) : <div className="h-8 w-8" />}
-                    </td>
-                    <td className="pl-2 pr-2 py-3">
+                    <td className="pl-4 pr-2 py-3">
                       {p.imageDataUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={p.imageDataUrl} alt={p.codeName} className="h-12 w-12 rounded-md object-cover border border-[#bfdbfe]/40" />
@@ -282,56 +215,35 @@ export default function HoldInsightsPage() {
                         <p className="mt-1 text-[11px] text-amber-600 leading-snug italic">"{p.verdictRemarks}"</p>
                       )}
                     </td>
-                    <td className="px-4 py-3 w-40">
+                    <td className="px-4 py-3">
+                      <span className={`inline-block rounded border px-2 py-0.5 text-[11px] font-medium ${source === "Improvement Sample" ? "border-purple-400/40 bg-purple-400/10 text-purple-500" : "border-[#bfdbfe]/50 bg-[#f8faff] text-[#64748b]"}`}>
+                        {source}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 max-w-[180px]">
                       {p.verdictRemarks ? (
-                        <p className="text-xs text-amber-700 italic leading-snug break-words whitespace-normal">"{p.verdictRemarks}"</p>
+                        <p className="text-xs text-amber-700 italic leading-snug">"{p.verdictRemarks}"</p>
                       ) : <span className="text-xs text-[#94a3b8]">—</span>}
                     </td>
                     <td className="px-4 py-3">
-                      <span className="inline-flex items-center rounded-md border border-purple-500/50 bg-purple-500/15 px-2 py-0.5 text-[11px] font-bold text-purple-600">
+                      <span className="inline-flex items-center gap-1 rounded-md border border-purple-500/50 bg-purple-500/15 px-2 py-0.5 text-[11px] font-bold text-purple-600 tracking-wide">
                         v{p.sampleVersion ?? 1}{source === "Improvement Sample" ? " Improvement" : " On Hold"}
                       </span>
                     </td>
-                    <td className="px-4 py-3 min-w-[160px]" onClick={(e) => e.stopPropagation()}>
-                      {source === "Improvement Sample" ? (
-                        <ImprovSampleRowAction p={p} showToast={showToast} addNotification={addNotification} refreshProducts={refreshProducts} />
-                      ) : <span className="text-xs text-[#94a3b8]">—</span>}
-                    </td>
-                    <td className="px-4 py-3 w-56">
-                      {source === "Improvement Sample" ? (
-                        <div className="flex flex-col gap-1.5 items-start">
-                          {getImprovementPipeline(p).map((step, i) => {
-                            const isNpdPass = step.done && step.label.includes("NPD Testing — Pass");
-                            return (
-                              <span key={i} title={step.label} className={`block w-full rounded border px-2 py-0.5 text-[10px] truncate max-w-[200px] ${
-                                isNpdPass ? "border-green-600/50 bg-green-600/15 text-green-700 font-bold"
-                                : step.active ? "border-amber-500/40 bg-amber-500/10 text-amber-600 font-medium"
-                                : step.done ? "border-green-500/30 bg-green-500/10 text-green-600 font-medium"
-                                : "border-[#bfdbfe]/60 bg-[#eff6ff] text-[#64748b] font-medium"
-                              }`}>{step.label}</span>
-                            );
-                          })}
-                        </div>
-                      ) : <span className="text-xs text-[#94a3b8]">—</span>}
-                    </td>
-                    <td className="px-4 py-3 w-56">
-                      <div className="flex flex-col gap-1.5 items-start">
-                        <span className={`inline-block rounded border px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap ${STAGE_STYLE[stage]}`}>{STAGE_LABEL[stage]}</span>
-                        {[...(fc?.caseLog ?? [])].reverse().slice(0, 2).map((entry, i) => {
-                          const text = entry.note ?? entry.stage;
-                          return (
-                            <span key={i} title={text} className="block w-full rounded border border-[#bfdbfe]/60 bg-[#eff6ff] px-2 py-0.5 text-[10px] text-[#64748b] truncate max-w-[200px]">
-                              {text}
-                            </span>
-                          );
-                        })}
+                    <td className="px-4 py-3 max-w-xs">
+                      <span className={`inline-block rounded border px-2 py-0.5 text-[11px] font-medium mb-1.5 ${STAGE_STYLE[stage]}`}>{STAGE_LABEL[stage]}</span>
+                      <div className="flex flex-col gap-1">
+                        {[...(fc?.caseLog ?? [])].reverse().map((entry, i) => (
+                          <span key={i} className="inline-block rounded border border-[#bfdbfe]/60 bg-[#eff6ff] px-1.5 py-1 text-[10px] leading-tight">
+                            <span className="block text-[#94a3b8]">{fmtAt(entry.timestamp)}</span>
+                            <span className="block text-[#64748b] font-medium">{entry.note ?? entry.stage}</span>
+                          </span>
+                        ))}
                       </div>
                     </td>
                     <td className="px-4 py-3 text-xs text-[#1d4ed8] whitespace-nowrap">{fc?.expectedReplyDate ? fmtDate(fc.expectedReplyDate) : "—"}</td>
-                    {filter !== "Improvement Sample" && <>
-                      <td className="px-4 py-3 text-xs text-[#d97706] whitespace-nowrap">{p.statusChangedAt ? fmtDate(p.statusChangedAt) : "—"}</td>
-                      <td className="px-4 py-3 text-right text-xs text-[#d97706] whitespace-nowrap">{fmtDate(p.deadline)}</td>
-                    </>}
+                    <td className="px-4 py-3 text-xs text-[#d97706] whitespace-nowrap">{p.statusChangedAt ? fmtDate(p.statusChangedAt) : "—"}</td>
+                    <td className="px-4 py-3 text-right text-xs text-[#d97706] whitespace-nowrap">{fmtDate(p.deadline)}</td>
                   </tr>
                 ))
               )}
@@ -339,21 +251,6 @@ export default function HoldInsightsPage() {
           </table>
         </div>
       </GridBeam>
-
-      {/* NPD report viewer modal */}
-      <Modal open={!!reportViewId} onClose={() => setReportViewId(null)}>
-        {reportViewId && (() => {
-          const rp = products.find((x) => x.id === reportViewId);
-          if (!rp) return null;
-          const v = rp.sampleVersion ?? 1;
-          const allReports = [
-            ...(rp.npdReports ?? []),
-            ...(rp.npdReport ? [{ version: v, ...rp.npdReport }] : []),
-          ].filter((r, i, arr) => arr.findIndex((x) => x.version === r.version && x.submittedAt === r.submittedAt) === i)
-           .sort((a, b) => b.version - a.version);
-          return <HoldNpdReportsViewer reports={allReports} onClose={() => setReportViewId(null)} />;
-        })()}
-      </Modal>
 
       {/* Detail modal */}
       <Modal open={!!selected} onClose={() => setSelectedId(null)}>
@@ -369,285 +266,10 @@ export default function HoldInsightsPage() {
             setProducts={setProducts}
             addNotification={addNotification}
             showToast={showToast}
-            refreshProducts={refreshProducts}
           />
         )}
       </Modal>
     </AppShell>
-  );
-}
-
-// ─── Improvement Sample NPD section (shown in modal for improvement sample products) ──
-
-function ImprovSampleRowAction({ p, showToast, addNotification, refreshProducts }: {
-  p: ProductRow;
-  showToast: (msg: string) => void;
-  addNotification: ReturnType<typeof useProducts>["addNotification"];
-  refreshProducts: () => Promise<void>;
-}) {
-  const [date, setDate] = useState("");
-  const v = p.sampleVersion ?? 1;
-  const received = p.factoryComm?.improvementSampleReceivedAt;
-  const inNpd = p.status === "Pending NPD";
-
-  async function markReceived(e: React.MouseEvent) {
-    e.stopPropagation();
-    try {
-      await api.products.factoryImprovementSampleReceived(p.id, date || undefined, p.version);
-      await api.products.factoryCaseLog(p.id, "Improvement Sample", `Sample v${v} received${date ? ` — ${fmtDate(date)}` : ""} · sent to NPD Testing`);
-      await refreshProducts();
-      addNotification({ targetRoles: ALL_ROLES, productId: p.id, productName: p.codeName, message: `Improvement sample v${v} received for ${p.codeName} — sent to NPD Testing.` });
-      showToast(`Sample v${v} received — sent to NPD Testing`);
-    } catch (e) {
-      const { message } = apiErrorMessage(e);
-      showToast(message);
-    }
-  }
-
-  if (inNpd) {
-    return (
-      <div>
-        <p className="text-[11px] font-semibold text-amber-600">In NPD Testing</p>
-        {received && <p className="text-[10px] text-[#94a3b8] mt-0.5">Received {fmtDate(received)}</p>}
-      </div>
-    );
-  }
-  if (received) {
-    return (
-      <div>
-        <span className="inline-block rounded border border-green-500/30 bg-green-500/10 px-2 py-0.5 text-[10px] font-semibold text-green-600">✓ Received</span>
-        <p className="text-[10px] text-[#64748b] mt-0.5">{fmtDate(received)}</p>
-      </div>
-    );
-  }
-  return (
-    <div className="space-y-1.5" onClick={(e) => e.stopPropagation()}>
-      <input type="date" value={date} onChange={(e) => { e.stopPropagation(); setDate(e.target.value); }}
-        className="w-full rounded border border-purple-400/30 bg-white px-2 py-1 text-[10px] text-[#0f172a] outline-none focus:border-purple-400" />
-      <button onClick={markReceived}
-        className="w-full rounded border border-purple-400/50 bg-purple-400/10 px-2 py-1 text-[10px] font-semibold text-purple-500 hover:bg-purple-400/20 transition">
-        Mark Received
-      </button>
-    </div>
-  );
-}
-
-type VReport = { version: number; fileName: string | null; fileDataUrl: string | null; outcome: "Pass" | "Not Pass"; notes: string; submittedAt: string };
-
-function HoldNpdReportsViewer({ reports, onClose }: { reports: VReport[]; onClose: () => void }) {
-  const versions = [...new Set(reports.map((r) => r.version))].sort((a, b) => b - a);
-  const [activeV, setActiveV] = useState(versions[0] ?? 1);
-  const [fullscreen, setFullscreen] = useState(false);
-  const report = reports.find((r) => r.version === activeV);
-  const isPass = report?.outcome === "Pass";
-  const isPdf = report?.fileName?.toLowerCase().endsWith(".pdf") ?? false;
-
-  const tabs = (
-    <div className="flex gap-1.5 flex-wrap px-5 pt-4 pb-3 border-b border-[#bfdbfe]/30">
-      {versions.map((v) => {
-        const r = reports.find((x) => x.version === v);
-        const p = r?.outcome === "Pass";
-        return (
-          <button key={v} onClick={() => setActiveV(v)}
-            className={`rounded-md border px-3 py-1 text-xs font-semibold transition ${activeV === v
-              ? p ? "border-green-500 bg-green-500/15 text-green-600" : "border-red-500 bg-red-500/15 text-red-500"
-              : "border-[#bfdbfe]/50 bg-white text-[#64748b] hover:bg-[#eff6ff]"}`}>
-            v{v} {r ? (p ? "✓" : "✕") : ""}
-          </button>
-        );
-      })}
-    </div>
-  );
-
-  if (fullscreen) return (
-    <div className="fixed inset-0 z-[60] flex flex-col bg-white">
-      <div className="flex items-center justify-between border-b border-[#bfdbfe]/30 px-5 py-3 shrink-0">
-        <div className="flex items-center gap-3">
-          <p className="font-semibold text-slate-900">NPD Reports</p>
-          {report && <span className={`rounded border px-2 py-0.5 text-xs font-semibold ${isPass ? "border-green-500/30 bg-green-500/10 text-green-500" : "border-red-500/30 bg-red-500/10 text-red-400"}`}>{isPass ? "Pass" : "Fail"}</span>}
-        </div>
-        <div className="flex gap-2">
-          <button onClick={() => setFullscreen(false)} className="rounded border border-[#bfdbfe]/50 px-2 py-1 text-xs text-[#64748b] hover:bg-[#eff6ff]">⊠ Collapse</button>
-          <button onClick={onClose} className="text-[#94a3b8] hover:text-[#1d4ed8]"><X size={18} /></button>
-        </div>
-      </div>
-      {tabs}
-      <div className="flex flex-1 overflow-hidden">
-        <div className="w-72 shrink-0 border-r border-[#bfdbfe]/30 overflow-y-auto px-5 py-4">
-          {report?.notes ? <div className="rounded-md border border-[#bfdbfe]/40 bg-[#eff6ff] px-3 py-2.5 text-sm whitespace-pre-wrap leading-relaxed">{report.notes}</div> : <p className="text-xs text-[#94a3b8]">No observations recorded.</p>}
-        </div>
-        <div className="flex-1 overflow-hidden bg-[#f8faff]">
-          {isPdf && report?.fileDataUrl ? <iframe src={report.fileDataUrl} className="h-full w-full" title="NPD Report" /> : <div className="flex h-full items-center justify-center"><p className="text-sm text-[#94a3b8]">{report?.fileName ? "Not a PDF — no preview available." : "No file attached."}</p></div>}
-        </div>
-      </div>
-    </div>
-  );
-
-  return (
-    <div className="max-h-[85vh] overflow-y-auto">
-      <div className="flex items-start justify-between gap-3 px-5 pt-4 pb-0">
-        <p className="font-semibold text-slate-900">NPD Reports</p>
-        <div className="flex gap-2 shrink-0">
-          <button onClick={() => setFullscreen(true)} className="rounded border border-[#bfdbfe]/50 px-2 py-1 text-xs text-[#64748b] hover:bg-[#eff6ff]">⛶ Expand</button>
-          <button onClick={onClose} className="text-[#94a3b8] hover:text-[#1d4ed8]"><X size={18} /></button>
-        </div>
-      </div>
-      {tabs}
-      {report ? (
-        <div className="px-5 py-4 space-y-4">
-          <div className={`rounded-md border px-4 py-3 ${isPass ? "border-green-500/30 bg-green-500/10" : "border-red-500/30 bg-red-500/10"}`}>
-            <p className="text-[10px] uppercase tracking-wide text-[#64748b] mb-0.5">v{activeV} NPD Outcome</p>
-            <p className={`text-2xl font-bold ${isPass ? "text-green-400" : "text-red-400"}`}>{isPass ? "✓ Pass" : "✕ Fail"}</p>
-            <p className="text-[11px] text-[#94a3b8] mt-0.5">Submitted {new Date(report.submittedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</p>
-          </div>
-          {report.notes ? (
-            <div>
-              <p className="text-[10px] uppercase tracking-wide text-[#64748b] mb-1.5">QA Observations</p>
-              <div className="rounded-md border border-[#bfdbfe]/40 bg-[#eff6ff] px-4 py-3 text-sm whitespace-pre-wrap leading-relaxed">{report.notes}</div>
-            </div>
-          ) : <p className="text-xs text-[#94a3b8]">No observations recorded.</p>}
-          {isPdf && report.fileDataUrl && <iframe src={report.fileDataUrl} className="w-full rounded-md border border-[#bfdbfe]/40" style={{ height: 420 }} title="NPD Report" />}
-          {report.fileName && !isPdf && <p className="text-xs text-[#94a3b8]">File attached: {report.fileName} (no preview — not a PDF)</p>}
-          {!report.fileName && <p className="text-xs text-[#94a3b8]">No file attached.</p>}
-        </div>
-      ) : <p className="px-5 py-4 text-xs text-[#94a3b8]">No report for this version.</p>}
-    </div>
-  );
-}
-
-function NpdReportCard({ r, version }: { r: { fileName: string | null; fileDataUrl: string | null; outcome: "Pass" | "Not Pass"; notes: string; submittedAt: string }; version: number }) {
-  const pass = r.outcome === "Pass";
-  return (
-    <div className={`rounded-md border p-3 ${pass ? "border-green-500/20 bg-green-500/5" : "border-red-500/20 bg-red-500/5"}`}>
-      <div className="flex items-center gap-2 mb-1">
-        <span className="text-xs font-semibold text-[#64748b]">v{version}</span>
-        <span className={`text-xs font-bold ${pass ? "text-green-500" : "text-red-400"}`}>{pass ? "✓ Pass" : "✕ Fail"}</span>
-        <span className="text-[11px] text-[#94a3b8]">{new Date(r.submittedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
-        {r.fileName && r.fileDataUrl && (
-          <a href={r.fileDataUrl} download={r.fileName} className="ml-auto text-xs text-[#1d4ed8] underline">Download</a>
-        )}
-      </div>
-      {r.notes && <p className="text-xs text-[#0f172a] whitespace-pre-wrap leading-relaxed">{r.notes}</p>}
-    </div>
-  );
-}
-
-function ImprovNpdSection({ p, showToast, addNotification, refreshProducts }: {
-  p: ProductRow;
-  showToast: (msg: string) => void;
-  addNotification: ReturnType<typeof useProducts>["addNotification"];
-  refreshProducts: () => Promise<void>;
-}) {
-  const [showPrevReports, setShowPrevReports] = useState(false);
-  const [receivedDate, setReceivedDate] = useState("");
-  const v = p.sampleVersion ?? 1;
-  const fc = p.factoryComm;
-  const received = fc?.improvementSampleReceivedAt;
-  const inNpd = p.status === "Pending NPD";
-  // Only use npdReport for this version if the sample was actually received (guards against stale prior-version report)
-  const vReport = received
-    ? (p.npdReports?.slice().reverse().find((r) => r.version === v) ?? (p.npdReport && !inNpd ? { ...p.npdReport, version: v } : null))
-    : null;
-  const prevReports = (p.npdReports ?? []).filter((r) => r.version !== v);
-
-  async function markReceived() {
-    try {
-      await api.products.factoryImprovementSampleReceived(p.id, receivedDate || undefined, p.version);
-      await api.products.factoryCaseLog(p.id, "Improvement Sample", `Sample v${v} received${receivedDate ? ` — ${fmtDate(receivedDate)}` : ""}`);
-      await refreshProducts();
-      addNotification({ targetRoles: ALL_ROLES, productId: p.id, productName: p.codeName, message: `Improvement sample v${v} received for ${p.codeName}.` });
-      showToast(`Sample v${v} received`);
-      setReceivedDate("");
-    } catch (e) {
-      const { message } = apiErrorMessage(e);
-      showToast(message);
-    }
-  }
-
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <p className="text-xs font-semibold uppercase tracking-wide text-purple-500">Sample v{v} — NPD Result</p>
-        {prevReports.length > 0 && (
-          <button onClick={() => setShowPrevReports((s) => !s)}
-            className="flex items-center gap-1.5 rounded-md border border-[#bfdbfe]/50 bg-[#eff6ff] px-3 py-1 text-xs text-[#1d4ed8] hover:bg-[#dbeafe] transition">
-            <FileText size={11} />
-            {showPrevReports ? "Hide" : "View"} Previous Reports ({prevReports.length})
-          </button>
-        )}
-      </div>
-
-      {/* Previous reports */}
-      {showPrevReports && prevReports.length > 0 && (
-        <div className="space-y-2">
-          <p className="text-[10px] uppercase tracking-wide text-[#64748b]">Previous Reports</p>
-          {prevReports.map((r, i) => <NpdReportCard key={i} r={r} version={r.version} />)}
-        </div>
-      )}
-
-      {/* Current state */}
-      {inNpd ? (
-        <div className="rounded-md border border-amber-400/30 bg-amber-400/5 px-3 py-2.5 space-y-0.5">
-          <p className="text-xs text-amber-600 font-medium">In NPD Testing — awaiting QA report</p>
-          {received && <p className="text-[11px] text-[#94a3b8]">Sample received: {fmtDate(received)}</p>}
-        </div>
-      ) : vReport ? (
-        <div className={`rounded-md border p-3 ${vReport.outcome === "Pass" ? "border-green-500/30 bg-green-500/8" : "border-red-500/30 bg-red-500/8"}`}>
-          <div className="flex items-center gap-2 mb-1">
-            <span className={`text-sm font-bold ${vReport.outcome === "Pass" ? "text-green-500" : "text-red-400"}`}>
-              {vReport.outcome === "Pass" ? "✓ Pass" : "✕ Fail"} — v{v}
-            </span>
-            <span className="text-[11px] text-[#94a3b8]">{fmtDate(vReport.submittedAt)}</span>
-          </div>
-          {vReport.notes && <p className="text-xs text-[#0f172a] whitespace-pre-wrap leading-relaxed">{vReport.notes}</p>}
-        </div>
-      ) : received ? (
-        <div className="rounded-md border border-green-500/20 bg-green-500/5 px-3 py-2.5">
-          <p className="text-xs text-green-600 font-medium">Sample Received — {fmtDate(received)}</p>
-        </div>
-      ) : (
-        // Sample not yet received
-        <div className="rounded-md border border-purple-400/30 bg-purple-400/5 p-3 space-y-2">
-          <p className="text-xs font-semibold text-purple-500">Mark Sample Received</p>
-          <input type="date" value={receivedDate} onChange={(e) => setReceivedDate(e.target.value)}
-            className="w-full rounded-md border border-purple-400/30 bg-white px-3 py-2 text-sm text-[#0f172a] outline-none focus:border-purple-400" />
-          <button onClick={markReceived}
-            className="w-full rounded-md border border-purple-400/50 bg-purple-400/15 py-2 text-xs font-semibold text-purple-500 hover:bg-purple-400/25 transition">
-            Mark Sample v{v} Received
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Next-version toggle for improvement sample products in factory stage panels ─
-
-function ImprovSampleNextVersionSection({ source, p, showNextImprovCard, setShowNextImprovCard, improvSampleTick, setImprovSampleTick, improvSampleDate, setImprovSampleDate, markImprovementSample }: {
-  source: CaseSource;
-  p: ProductRow;
-  showNextImprovCard: boolean;
-  setShowNextImprovCard: (v: boolean) => void;
-  improvSampleTick: boolean;
-  setImprovSampleTick: (v: boolean) => void;
-  improvSampleDate: string;
-  setImprovSampleDate: (v: string) => void;
-  markImprovementSample: () => void;
-}) {
-  if (source === "On Hold") {
-    return <ImprovSampleCard tick={improvSampleTick} setTick={setImprovSampleTick} date={improvSampleDate} setDate={setImprovSampleDate} onConfirm={markImprovementSample} nextVersion={(p.sampleVersion ?? 1) + 1} />;
-  }
-  // Improvement sample — show as a collapsible "Not happy?" option
-  return (
-    <div className="space-y-1">
-      <button onClick={() => setShowNextImprovCard(!showNextImprovCard)}
-        className="w-full text-xs text-purple-500 hover:underline text-left">
-        {showNextImprovCard ? "▾ Hide" : `▸ Not happy with the sample? Request v${(p.sampleVersion ?? 1) + 1} →`}
-      </button>
-      {showNextImprovCard && (
-        <ImprovSampleCard tick={improvSampleTick} setTick={setImprovSampleTick} date={improvSampleDate} setDate={setImprovSampleDate} onConfirm={markImprovementSample} nextVersion={(p.sampleVersion ?? 1) + 1} />
-      )}
-    </div>
   );
 }
 
@@ -684,7 +306,7 @@ function ImprovSampleCard({ tick, setTick, date, setDate, onConfirm, nextVersion
 
 // ─── Detail modal content ───────────────────────────────────────────────────
 
-function HoldCaseDetail({ holdCase, isQA, isReadOnly, session, onClose, patchFC, pushLog, setProducts, addNotification, showToast, refreshProducts }: {
+function HoldCaseDetail({ holdCase, isQA, isReadOnly, session, onClose, patchFC, pushLog, setProducts, addNotification, showToast }: {
   holdCase: HoldCase;
   isQA: boolean;
   isReadOnly: boolean;
@@ -695,7 +317,6 @@ function HoldCaseDetail({ holdCase, isQA, isReadOnly, session, onClose, patchFC,
   setProducts: ReturnType<typeof useProducts>["setProducts"];
   addNotification: ReturnType<typeof useProducts>["addNotification"];
   showToast: (msg: string) => void;
-  refreshProducts: () => Promise<void>;
 }) {
   const { product: p, fc, source, stage } = holdCase;
   const canAct = !isReadOnly;
@@ -714,143 +335,176 @@ function HoldCaseDetail({ holdCase, isQA, isReadOnly, session, onClose, patchFC,
   const [orderColors, setOrderColors] = useState<{ color: string; quantity: string }[]>([{ color: "", quantity: "" }]);
   const [improvSampleTick, setImprovSampleTick] = useState(false);
   const [improvSampleDate, setImprovSampleDate] = useState("");
-  const [showNextImprovCard, setShowNextImprovCard] = useState(false);
 
   const now = () => new Date().toISOString();
 
-  async function logAwaitingReply() {
+  function logAwaitingReply() {
     if (!expectedDate) return;
-    try {
-      await api.products.factoryExpectedDate(p.id, expectedDate, p.version);
-      await api.products.factoryCaseLog(p.id, "Factory Not Responded", `Feedback shared — awaiting factory reply by ${fmtDate(expectedDate)}`);
-      await refreshProducts();
-      addNotification({ targetRoles: ALL_ROLES, productId: p.id, productName: p.codeName, message: `${p.codeName} — awaiting factory reply by ${fmtDate(expectedDate)}.` });
-      showToast("Logged — awaiting factory reply");
-    } catch (e) {
-      const { message } = apiErrorMessage(e);
-      showToast(message);
-      if ((e as { isConflict?: boolean }).isConflict) await refreshProducts();
-    }
+    const t = now();
+    patchFC(p.id, (f) => ({ ...f, expectedReplyDate: expectedDate, reminderSentForDate: null }));
+    pushLog(p.id, { stage: "Factory Not Responded", note: `Feedback shared — awaiting factory reply by ${fmtDate(expectedDate)}`, timestamp: t });
+    addNotification({ targetRoles: ALL_ROLES, productId: p.id, productName: p.codeName, message: `${p.codeName} — awaiting factory reply by ${fmtDate(expectedDate)}.` });
+    showToast("Logged — awaiting factory reply");
   }
 
-  async function logFactoryReply() {
+  function logFactoryReply() {
     if (!replySummary) return;
+    const t = now();
     const displaySummary = replySummary === "Decision Pending" ? "Awaiting Factory Decision" : replySummary;
-    try {
-      await api.products.factoryLogReply(p.id, replySummary, replyNotes || undefined, p.version);
-      await api.products.factoryCaseLog(p.id, "Factory Replied", `Reply received — ${displaySummary}${replyNotes ? ` · ${replyNotes}` : ""}`);
-      await refreshProducts();
-      addNotification({ targetRoles: ALL_ROLES, productId: p.id, productName: p.codeName, message: `${p.codeName} — factory replied: ${displaySummary}.` });
-      showToast("Factory reply logged");
-      setReplySummary(""); setReplyNotes("");
-    } catch (e) {
-      const { message } = apiErrorMessage(e);
-      showToast(message);
-      if ((e as { isConflict?: boolean }).isConflict) await refreshProducts();
-    }
+    patchFC(p.id, (f) => ({ ...f, replyReceivedAt: t, replySummary: replySummary as FactoryReplySummary }));
+    pushLog(p.id, { stage: "Factory Replied", note: `Reply received — ${displaySummary}${replyNotes ? ` · ${replyNotes}` : ""}`, timestamp: t });
+    addNotification({ targetRoles: ALL_ROLES, productId: p.id, productName: p.codeName, message: `${p.codeName} — factory replied: ${displaySummary}.` });
+    showToast("Factory reply logged");
+    setReplySummary(""); setReplyNotes("");
   }
 
-  async function logPartialResolved() {
-    try {
-      await api.products.factoryPartialResolved(p.id, partialNotes || undefined, p.version);
-      await api.products.factoryCaseLog(p.id, "Factory Decision Pending", `Factory finalized pending points${partialNotes ? ` — ${partialNotes}` : ""}`);
-      await refreshProducts();
-      showToast("Factory decision logged");
-      setPartialNotes("");
-    } catch (e) {
-      const { message } = apiErrorMessage(e);
-      showToast(message);
-    }
+  function logPartialResolved() {
+    const t = now();
+    patchFC(p.id, (f) => ({ ...f, partialResolvedAt: t }));
+    pushLog(p.id, { stage: "Factory Decision Pending", note: `Factory finalized pending points${partialNotes ? ` — ${partialNotes}` : ""}`, timestamp: t });
+    showToast("Factory decision logged");
+    setPartialNotes("");
   }
 
-  async function markAwaitingImprovSample() {
-    try {
-      await api.products.factoryCaseLog(p.id, "Internal Decision Pending", "Awaiting improvement sample results before final decision");
-      await refreshProducts();
-      showToast("Marked — awaiting improvement sample results");
-    } catch (e) {
-      const { message } = apiErrorMessage(e);
-      showToast(message);
-    }
-  }
+  function applyInternalDecision(decision: "Approved" | "Rejected") {
+    const t = now();
+    const by = session?.name ?? "Unknown";
+    patchFC(p.id, (f) => ({ ...f, internalDecision: decision, internalDecisionAt: t, internalDecisionBy: by, internalDecisionNotes: decisionNotes.trim() || undefined }));
+    const verb = decision === "Approved" ? `${by} has approved` : `${by} has rejected`;
+    pushLog(p.id, { stage: "Internal Decision Pending", note: `${verb}${decisionNotes ? ` — ${decisionNotes}` : ""}`, timestamp: t });
 
-  async function applyInternalDecision(decision: "Approved" | "Rejected") {
-    try {
-      await api.products.factoryInternalDecision(p.id, {
-        decision,
-        notes: decisionNotes.trim() || undefined,
-        improvement_needed: improvementNeeded,
-        improvement_remarks: improvementNeeded ? (improvementRemarks.trim() || undefined) : undefined,
-      }, p.version);
-      await refreshProducts();
-      const by = session?.name ?? "Unknown";
-      const verb = decision === "Approved" ? `${by} has approved` : `${by} has rejected`;
-      addNotification({ targetRoles: ALL_ROLES, productId: p.id, productName: p.codeName, message: `${verb} for ${p.codeName}.` });
-      showToast(`${decision} — case resolved`);
-      setDecisionNotes(""); setImprovementNeeded(false); setImprovementRemarks("");
-      onClose();
-    } catch (e) {
-      const { message } = apiErrorMessage(e);
-      showToast(message);
-      if ((e as { isConflict?: boolean }).isConflict) await refreshProducts();
-    }
+    // Reflect the decision on the underlying product
+    setProducts((prev) => prev.map((x) => {
+      if (x.id !== p.id) return x;
+      if (source === "On Hold") {
+        if (decision === "Approved") {
+          const code = "AP-" + Math.random().toString(36).slice(2, 5).toUpperCase();
+          return {
+            ...x,
+            status: "Approved" as Status,
+            statusChangedAt: t,
+            orderDecision: {
+              state: "pending", internalCode: code, decidedAt: null, decidedBy: null, colors: [],
+              improvedGoldenSampleExpected: improvementNeeded,
+              improvementNotes: improvementNeeded ? (improvementRemarks.trim() || undefined) : undefined,
+            },
+            activityLog: [...x.activityLog, {
+              action: improvementNeeded
+                ? `${verb} — moved to Approved — improvement requirement${improvementRemarks ? ` · ${improvementRemarks}` : ""}`
+                : `${verb} — moved to Approved`,
+              timestamp: t,
+              stages: improvementNeeded ? ["EMAILED TO FACTORY", "IMPROVEMENT REQUIREMENT"] : ["EMAILED TO FACTORY"],
+            }],
+          };
+        }
+        return {
+          ...x, status: "Rejected" as Status, statusChangedAt: t,
+          activityLog: [...x.activityLog, { action: `${verb} — moved to Rejected`, timestamp: t, stages: ["REJECTED"] }],
+        };
+      }
+      // Improvement-sample case: mark resolved on the golden sample
+      if (x.goldenWorkflow?.goldenSample) {
+        return {
+          ...x,
+          goldenWorkflow: {
+            ...x.goldenWorkflow,
+            goldenSample: { ...x.goldenWorkflow.goldenSample, improvementFixed: decision !== "Rejected", improvementFixedAt: t, improvementFixedNotes: decisionNotes.trim() || null },
+          },
+          activityLog: [...x.activityLog, { action: `${verb} — improvement case resolved`, timestamp: t }],
+        };
+      }
+      return x;
+    }));
+    addNotification({ targetRoles: ALL_ROLES, productId: p.id, productName: p.codeName, message: `${verb} for ${p.codeName}.` });
+    showToast(`${decision} — case resolved`);
+    setDecisionNotes(""); setImprovementNeeded(false); setImprovementRemarks("");
   }
 
   function setOrderColor(i: number, field: "color" | "quantity", value: string) {
     setOrderColors((prev) => prev.map((c, j) => j === i ? { ...c, [field]: value } : c));
   }
 
-  async function confirmOrderPlace() {
+  function confirmOrderPlace() {
+    const t = now();
+    const by = session?.name ?? "Unknown";
     const validColors = orderColors.filter((c) => c.color.trim()).map((c) => ({ color: c.color.trim(), quantity: parseInt(c.quantity) || 0 }));
+
     if (source === "On Hold" && validColors.length === 0) return;
-    try {
-      await api.products.factoryInternalDecision(p.id, {
-        decision: "Order Placed",
-        notes: decisionNotes.trim() || undefined,
-        colors: validColors.length > 0 ? validColors : undefined,
-      }, p.version);
-      await refreshProducts();
-      addNotification({ targetRoles: ALL_ROLES, productId: p.id, productName: p.codeName, message: source === "On Hold" ? `Order placed for ${p.codeName} — Golden Sample started.` : `${p.codeName} — improvement resolved, continuing with existing order.` });
-      showToast("Order placed — case resolved");
-      setDecisionNotes(""); setOrderColors([{ color: "", quantity: "" }]); setShowOrderPlaceForm(false);
-      onClose();
-    } catch (e) {
-      const { message } = apiErrorMessage(e);
-      showToast(message);
-      if ((e as { isConflict?: boolean }).isConflict) await refreshProducts();
-    }
+
+    patchFC(p.id, (f) => ({ ...f, internalDecision: "Order Placed", internalDecisionAt: t, internalDecisionBy: by, internalDecisionNotes: decisionNotes.trim() || undefined }));
+
+    const note = source === "On Hold"
+      ? `${by} placed order — ${validColors.map((c) => `${c.color} ×${c.quantity}`).join(", ")}${decisionNotes ? ` · ${decisionNotes}` : ""}`
+      : `${by} confirmed continuing with existing order — improvement resolved${decisionNotes ? ` · ${decisionNotes}` : ""}`;
+    pushLog(p.id, { stage: "Internal Decision Pending", note, timestamp: t });
+
+    setProducts((prev) => prev.map((x) => {
+      if (x.id !== p.id) return x;
+      if (source === "On Hold") {
+        const code = "AP-" + Math.random().toString(36).slice(2, 5).toUpperCase();
+        return {
+          ...x,
+          status: "Approved" as Status,
+          statusChangedAt: t,
+          orderDecision: { state: "placed", internalCode: code, decidedAt: t, decidedBy: by, colors: validColors },
+          goldenWorkflow: {
+            purchaseNotifiedAt: t,
+            orderConfirmedAt: t,
+            purchaseLog: [{ action: `Order placed (${code}) — ${validColors.map((c) => `${c.color} ×${c.quantity}`).join(", ")}`, timestamp: t }],
+            details: null, compliance: null, packaging: null,
+            goldenSample: { status: "Requested", expectedDate: "", receivedAt: null, approvedAt: null, improvementFixed: null, improvementFixedAt: null, improvementFixedNotes: null, log: [{ action: "Golden sample requested", timestamp: t }] },
+          },
+          activityLog: [...x.activityLog, { action: `Order placed (${code}) from Hold — moving to Golden Sample`, timestamp: t, stages: ["ORDER PLACED"] }],
+        };
+      }
+      if (x.goldenWorkflow?.goldenSample) {
+        return {
+          ...x,
+          goldenWorkflow: {
+            ...x.goldenWorkflow,
+            goldenSample: { ...x.goldenWorkflow.goldenSample, improvementFixed: true, improvementFixedAt: t, improvementFixedNotes: decisionNotes.trim() || null },
+          },
+          activityLog: [...x.activityLog, { action: `${by} confirmed continuing with existing order — improvement resolved`, timestamp: t }],
+        };
+      }
+      return x;
+    }));
+
+    addNotification({ targetRoles: ALL_ROLES, productId: p.id, productName: p.codeName, message: source === "On Hold" ? `Order placed for ${p.codeName} — Golden Sample started.` : `${p.codeName} — improvement resolved, continuing with existing order.` });
+    showToast("Order placed — case resolved");
+    setDecisionNotes(""); setOrderColors([{ color: "", quantity: "" }]); setShowOrderPlaceForm(false);
   }
 
-  async function sendBackToFactory() {
+  function sendBackToFactory() {
     if (!sendBackDate) return;
-    try {
-      await api.products.factorySendBack(p.id, sendBackDate, sendBackNote.trim() || undefined, p.version);
-      await refreshProducts();
-      addNotification({ targetRoles: ALL_ROLES, productId: p.id, productName: p.codeName, message: `${p.codeName} — sent back to factory, awaiting reply by ${fmtDate(sendBackDate)}.` });
-      showToast("Sent back to factory");
-      setShowSendBack(false); setSendBackDate(""); setSendBackNote("");
-    } catch (e) {
-      const { message, isConflict } = apiErrorMessage(e);
-      showToast(message);
-      if (isConflict) await refreshProducts();
-    }
+    const t = now();
+    patchFC(p.id, (f) => ({ ...f, replyReceivedAt: null, replySummary: null, partialResolvedAt: null, expectedReplyDate: sendBackDate, reminderSentForDate: null }));
+    pushLog(p.id, { stage: "Factory Not Responded", note: `Sent back to factory — awaiting reply by ${fmtDate(sendBackDate)}${sendBackNote ? ` · ${sendBackNote}` : ""}`, timestamp: t });
+    addNotification({ targetRoles: ALL_ROLES, productId: p.id, productName: p.codeName, message: `${p.codeName} — sent back to factory, awaiting reply by ${fmtDate(sendBackDate)}.` });
+    showToast("Sent back to factory");
+    setShowSendBack(false); setSendBackDate(""); setSendBackNote("");
   }
 
   const caseLog = [...(fc?.caseLog ?? [])].reverse();
 
-  async function markImprovementSample() {
+  function markImprovementSample() {
+    const t = now();
     const nextVersion = (p.sampleVersion ?? 1) + 1;
-    try {
-      await api.products.factoryImprovementSample(p.id, improvSampleDate || undefined, p.version);
-      await api.products.factoryCaseLog(p.id, "Factory Not Responded", `Improvement sample expected — v${nextVersion}${improvSampleDate ? ` · expected by ${fmtDate(improvSampleDate)}` : ""}`);
-      await refreshProducts();
-      addNotification({ targetRoles: ALL_ROLES, productId: p.id, productName: p.codeName, message: `${p.codeName} — improvement sample v${nextVersion} expected.` });
-      showToast(`Improvement sample v${nextVersion} marked`);
-      onClose();
-    } catch (e) {
-      const { message } = apiErrorMessage(e);
-      showToast(message);
-    }
+    setProducts((prev) => prev.map((x) => {
+      if (x.id !== p.id) return x;
+      const fc = x.factoryComm ?? defaultFactoryComm(t);
+      return {
+        ...x,
+        status: "Pending NPD" as Status,
+        sampleVersion: nextVersion,
+        statusChangedAt: t,
+        factoryComm: { ...fc, improvementSampleExpected: true, expectedReplyDate: improvSampleDate || fc.expectedReplyDate, caseLog: [...(fc.caseLog ?? []), { stage: "Factory Not Responded", note: `Improvement sample expected — will be tracked as v${nextVersion}${improvSampleDate ? ` · expected by ${fmtDate(improvSampleDate)}` : ""}`, timestamp: t }] },
+        activityLog: [...x.activityLog, { action: `Improvement sample expected (v${nextVersion}) — sent back to NPD Testing`, timestamp: t, stages: [`IMPROVEMENT SAMPLE v${nextVersion}: NPD PENDING`] }],
+      };
+    }));
+    addNotification({ targetRoles: ALL_ROLES, productId: p.id, productName: p.codeName, message: `${p.codeName} — improvement sample expected, v${nextVersion} sent to NPD Testing.` });
+    showToast(`Improvement sample v${nextVersion} — sent to NPD Testing`);
+    onClose();
   }
 
   return (
@@ -907,7 +561,7 @@ function HoldCaseDetail({ holdCase, isQA, isReadOnly, session, onClose, patchFC,
               </button>
             </div>
 
-            <ImprovSampleNextVersionSection source={source} p={p} showNextImprovCard={showNextImprovCard} setShowNextImprovCard={setShowNextImprovCard} improvSampleTick={improvSampleTick} setImprovSampleTick={setImprovSampleTick} improvSampleDate={improvSampleDate} setImprovSampleDate={setImprovSampleDate} markImprovementSample={markImprovementSample} />
+            {source === "On Hold" && <ImprovSampleCard tick={improvSampleTick} setTick={setImprovSampleTick} date={improvSampleDate} setDate={setImprovSampleDate} onConfirm={markImprovementSample} nextVersion={(p.sampleVersion ?? 1) + 1} />}
           </div>
         )}
 
@@ -922,7 +576,7 @@ function HoldCaseDetail({ holdCase, isQA, isReadOnly, session, onClose, patchFC,
               className="w-full rounded-md border border-orange-500/40 bg-orange-500/10 py-2 text-xs font-medium text-orange-500 hover:bg-orange-500/20">
               Factory finalized pending points
             </button>
-            <ImprovSampleNextVersionSection source={source} p={p} showNextImprovCard={showNextImprovCard} setShowNextImprovCard={setShowNextImprovCard} improvSampleTick={improvSampleTick} setImprovSampleTick={setImprovSampleTick} improvSampleDate={improvSampleDate} setImprovSampleDate={setImprovSampleDate} markImprovementSample={markImprovementSample} />
+            {source === "On Hold" && <ImprovSampleCard tick={improvSampleTick} setTick={setImprovSampleTick} date={improvSampleDate} setDate={setImprovSampleDate} onConfirm={markImprovementSample} nextVersion={(p.sampleVersion ?? 1) + 1} />}
           </div>
         )}
 
@@ -959,10 +613,6 @@ function HoldCaseDetail({ holdCase, isQA, isReadOnly, session, onClose, patchFC,
               </button>
               <button onClick={() => applyInternalDecision("Rejected")} className="flex-1 rounded-md border border-red-500/40 bg-red-500/10 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/20">Reject</button>
             </div>
-            <button onClick={markAwaitingImprovSample}
-              className="w-full rounded-md border border-purple-400/40 bg-purple-400/8 py-1.5 text-xs font-medium text-purple-500 hover:bg-purple-400/15 transition">
-              ⏳ Awaiting Improvement Sample Results
-            </button>
 
             {/* Order Place — popup-style form, same pattern as Order Confirmation */}
             {showOrderPlaceForm && (
@@ -1000,44 +650,22 @@ function HoldCaseDetail({ holdCase, isQA, isReadOnly, session, onClose, patchFC,
               </div>
             )}
 
-            {source === "Improvement Sample" ? (
-              <button
-                onClick={async () => {
-                  try {
-                    await api.products.factorySendBackNpd(p.id, decisionNotes.trim() || undefined, p.version);
-                    await refreshProducts();
-                    addNotification({ targetRoles: ALL_ROLES, productId: p.id, productName: p.codeName, message: `${p.codeName} — sent back to NPD Testing.` });
-                    showToast("Sent back to NPD Testing");
-                  } catch (e) {
-                    const { message, isConflict } = apiErrorMessage(e);
-                    showToast(message);
-                    if (isConflict) await refreshProducts();
-                  }
-                }}
-                className="w-full rounded-md border border-sky-500/40 bg-sky-500/10 py-1.5 text-xs font-medium text-sky-600 hover:bg-sky-500/20 transition"
-              >
-                🔬 Send back to NPD Testing
-              </button>
-            ) : (
-              <>
-                <button onClick={() => setShowSendBack((v) => !v)} className="w-full text-xs text-[#1d4ed8] hover:underline">
-                  {showSendBack ? "Cancel send back" : "Not happy with the reply? Send back to factory →"}
+            <button onClick={() => setShowSendBack((v) => !v)} className="w-full text-xs text-[#1d4ed8] hover:underline">
+              {showSendBack ? "Cancel send back" : "Not happy with the reply? Send back to factory →"}
+            </button>
+            {showSendBack && (
+              <div className="rounded-md border border-[#bfdbfe]/40 bg-white p-3 space-y-2">
+                <input type="date" value={sendBackDate} onChange={(e) => setSendBackDate(e.target.value)}
+                  className="w-full rounded-md border border-[#bfdbfe]/50 px-3 py-2 text-sm text-[#0f172a] outline-none focus:border-[#93c5fd]" />
+                <textarea value={sendBackNote} onChange={(e) => setSendBackNote(e.target.value)} rows={2} placeholder="What are we asking the factory for now?"
+                  className="w-full rounded-md border border-[#bfdbfe]/50 px-3 py-2 text-sm text-[#0f172a] outline-none focus:border-[#93c5fd] placeholder:text-[#94a3b8] resize-none" />
+                <button onClick={sendBackToFactory} disabled={!sendBackDate}
+                  className="w-full rounded-md bg-[#2563eb] py-1.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-40">
+                  Confirm send back
                 </button>
-                {showSendBack && (
-                  <div className="rounded-md border border-[#bfdbfe]/40 bg-white p-3 space-y-2">
-                    <input type="date" value={sendBackDate} onChange={(e) => setSendBackDate(e.target.value)}
-                      className="w-full rounded-md border border-[#bfdbfe]/50 px-3 py-2 text-sm text-[#0f172a] outline-none focus:border-[#93c5fd]" />
-                    <textarea value={sendBackNote} onChange={(e) => setSendBackNote(e.target.value)} rows={2} placeholder="What are we asking the factory for now?"
-                      className="w-full rounded-md border border-[#bfdbfe]/50 px-3 py-2 text-sm text-[#0f172a] outline-none focus:border-[#93c5fd] placeholder:text-[#94a3b8] resize-none" />
-                    <button onClick={sendBackToFactory} disabled={!sendBackDate}
-                      className="w-full rounded-md bg-[#2563eb] py-1.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-40">
-                      Confirm send back
-                    </button>
-                  </div>
-                )}
-              </>
+              </div>
             )}
-            <ImprovSampleNextVersionSection source={source} p={p} showNextImprovCard={showNextImprovCard} setShowNextImprovCard={setShowNextImprovCard} improvSampleTick={improvSampleTick} setImprovSampleTick={setImprovSampleTick} improvSampleDate={improvSampleDate} setImprovSampleDate={setImprovSampleDate} markImprovementSample={markImprovementSample} />
+            {source === "On Hold" && <ImprovSampleCard tick={improvSampleTick} setTick={setImprovSampleTick} date={improvSampleDate} setDate={setImprovSampleDate} onConfirm={markImprovementSample} nextVersion={(p.sampleVersion ?? 1) + 1} />}
           </div>
         )}
 
@@ -1047,36 +675,6 @@ function HoldCaseDetail({ holdCase, isQA, isReadOnly, session, onClose, patchFC,
             {fc?.internalDecisionNotes && <p className="text-xs text-[#1d4ed8] mt-1">{fc.internalDecisionNotes}</p>}
             <p className="text-[11px] text-[#94a3b8] mt-1">{fmt(fc?.internalDecisionAt)}</p>
           </div>
-        )}
-
-        {/* Improvement Sample — NPD result */}
-        {source === "Improvement Sample" && (
-          <>
-            {/* Show feedback/notes from case log when sent back to factory */}
-            {stage !== "Internal Decision Pending" && caseLog.length > 0 && (() => {
-              const lastNote = caseLog.find((e) => e.note);
-              return lastNote ? (
-                <div className="rounded-md border border-[#93c5fd]/30 bg-[#eff6ff] px-3 py-2.5">
-                  <p className="text-[10px] font-bold uppercase tracking-wide text-[#1d4ed8] mb-1">Last feedback logged</p>
-                  <p className="text-xs text-[#0f172a]">{lastNote.note}</p>
-                  <p className="text-[10px] text-[#94a3b8] mt-0.5">{fmt(lastNote.timestamp)}</p>
-                </div>
-              ) : null;
-            })()}
-            <ImprovNpdSection p={p} showToast={showToast} addNotification={addNotification} refreshProducts={refreshProducts} />
-            {/* v-next option — only when in Internal Decision Pending (other stages show it inside their panel above) */}
-            {stage === "Internal Decision Pending" && (
-              <>
-                <button onClick={() => setShowNextImprovCard((v) => !v)}
-                  className="w-full text-xs text-[#1d4ed8] hover:underline text-left">
-                  {showNextImprovCard ? "▾ Hide" : "▸ Not happy with the sample? Request v" + ((p.sampleVersion ?? 1) + 1) + " →"}
-                </button>
-                {showNextImprovCard && (
-                  <ImprovSampleCard tick={improvSampleTick} setTick={setImprovSampleTick} date={improvSampleDate} setDate={setImprovSampleDate} onConfirm={markImprovementSample} nextVersion={(p.sampleVersion ?? 1) + 1} />
-                )}
-              </>
-            )}
-          </>
         )}
 
         {/* Case history */}
