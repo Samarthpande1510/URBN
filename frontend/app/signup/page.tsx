@@ -6,9 +6,11 @@ import { useState, FormEvent } from "react";
 import { AuthShell } from "@/components/AuthShell";
 import { Field } from "@/components/Field";
 import { signup, validatePassword } from "@/lib/auth";
+import { useProducts } from "@/lib/products-context";
 
 export default function SignupPage() {
   const router = useRouter();
+  const { refreshProducts } = useProducts();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -35,6 +37,7 @@ export default function SignupPage() {
     setLoading(true);
     try {
       await signup(name.trim(), email.trim(), password);
+      await refreshProducts();
       router.push("/dashboard");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");

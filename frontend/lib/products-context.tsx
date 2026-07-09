@@ -504,12 +504,14 @@ export function ProductsProvider({ children }: { children: ReactNode }) {
     refreshProducts();
   }, [refreshProducts]);
 
-  // Keep all open windows in sync — silent background poll every 20s (only when logged in)
+  // Keep all open windows in sync — silent background poll every 20s (only when logged in).
+  // Checks the session on every tick (not just at mount) so it also picks up
+  // logins/signups that happen after this provider first mounted.
   useEffect(() => {
     if (typeof window === "undefined") return;
     const { getSession } = require("@/lib/auth");
-    if (!getSession()) return;
     const id = setInterval(() => {
+      if (!getSession()) return;
       runSilent(() => Promise.all([refreshProducts(), refreshNotifications()]));
     }, 20_000);
     return () => clearInterval(id);
