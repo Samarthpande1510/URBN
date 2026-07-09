@@ -657,6 +657,9 @@ function PackagingCard({ product }: { product: ProductRow }) {
   const [receivedDatePick, setReceivedDatePick] = useState(() => new Date().toISOString().split("T")[0]);
   const [editingReceivedDate, setEditingReceivedDate] = useState(false);
   const [receivedDateDraft, setReceivedDateDraft] = useState(pk?.sampleReceivedAt?.split("T")[0] ?? "");
+  const [dispatchDatePick, setDispatchDatePick] = useState(() => new Date().toISOString().split("T")[0]);
+  const [editingDispatchDate, setEditingDispatchDate] = useState(false);
+  const [dispatchDateDraft, setDispatchDateDraft] = useState(pk?.sampleDispatchedAt?.split("T")[0] ?? "");
 
   useEffect(() => {
     refreshGolden(product.id);
@@ -694,9 +697,19 @@ function PackagingCard({ product }: { product: ProductRow }) {
   async function markDispatched() {
     if (!pk) return;
     try {
-      await api.golden.dispatchPackagingSample(product.id, expectedDate || undefined, product.version);
+      await api.golden.dispatchPackagingSample(product.id, expectedDate || undefined, product.version, dispatchDatePick);
       await onRefresh();
       showToast(`Sample v${pk.sampleVersion ?? 1} dispatched`);
+    } catch (e: unknown) { showToast(`Error: ${e instanceof Error ? e.message : "Failed"}`); }
+  }
+
+  async function saveDispatchDate() {
+    if (!pk || !dispatchDateDraft) return;
+    try {
+      await api.golden.dispatchPackagingSample(product.id, undefined, product.version, dispatchDateDraft);
+      await onRefresh();
+      setEditingDispatchDate(false);
+      showToast("Dispatch date updated");
     } catch (e: unknown) { showToast(`Error: ${e instanceof Error ? e.message : "Failed"}`); }
   }
 
@@ -840,36 +853,55 @@ function PackagingCard({ product }: { product: ProductRow }) {
           {pk && (
             <>
               {/* Dispatched tick */}
-              <label className={`flex items-center gap-3 rounded-md border px-3 py-2.5 ${pk.sampleDispatchedAt ? "border-green-500/30 bg-green-500/5" : "border-[#bfdbfe]/30 bg-[#f8faff] cursor-pointer hover:bg-[#eff6ff]"}`}>
+              <div className={`flex items-center gap-3 rounded-md border px-3 py-2.5 ${pk.sampleDispatchedAt ? "border-green-500/30 bg-green-500/5" : "border-[#bfdbfe]/30 bg-[#f8faff]"}`}>
                 {pk.sampleDispatchedAt
                   ? <CheckCircle size={14} className="text-green-400 shrink-0" />
                   : <Circle size={14} className="text-[#cbd5e1] shrink-0" />}
                 <div className="flex-1">
                   <p className={`text-xs font-medium ${pk.sampleDispatchedAt ? "text-green-600" : "text-[#64748b]"}`}>Sample dispatched</p>
-                  {pk.sampleDispatchedAt && <p className="text-[10px] text-[#94a3b8] mt-0.5">{fmt(pk.sampleDispatchedAt)}</p>}
+                  {pk.sampleDispatchedAt && !editingDispatchDate && <p className="text-[10px] text-[#94a3b8] mt-0.5">{fmt(pk.sampleDispatchedAt)}</p>}
                 </div>
+                {pk.sampleDispatchedAt && !editingDispatchDate && !pk.decision && (
+                  <button onClick={() => { setDispatchDateDraft(pk.sampleDispatchedAt?.split("T")[0] ?? ""); setEditingDispatchDate(true); }}
+                    className="shrink-0 rounded-md border border-green-500/30 px-2.5 py-1 text-[11px] font-medium text-green-700 hover:bg-green-500/10">
+                    Edit date
+                  </button>
+                )}
                 {pk.sampleDispatchedAt && !pk.decision && (
-                  <button onClick={(e) => { e.preventDefault(); undoDispatch(); }} title="Undo dispatch"
+                  <button onClick={undoDispatch} title="Undo dispatch"
                     className="shrink-0 rounded-md border border-[#bfdbfe]/50 px-2.5 py-1 text-[11px] font-medium text-[#94a3b8] hover:bg-[#eff6ff] hover:text-[#64748b]">
                     ↩ Undo
                   </button>
                 )}
-                {!pk.sampleDispatchedAt && (
-                  <input type="checkbox" className="hidden" onChange={(e) => { if (e.target.checked) markDispatched(); }} />
-                )}
-              </label>
-              {!pk.sampleDispatchedAt && (
-                <button onClick={markDispatched}
-                  className="w-full rounded-md bg-[#2563eb] py-2 text-xs font-semibold text-white hover:opacity-90">
-                  Mark Sample Dispatched
-                </button>
-              )}
-              {/* Sample dispatched on date */}
-              {pk.sampleDispatchedAt && (
-                <div>
-                  <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-[#64748b]">Sample dispatched on</p>
-                  <p className="text-xs text-[#0f172a]">{fmt(pk.sampleDispatchedAt)}</p>
+              </div>
+              {pk.sampleDispatchedAt && editingDispatchDate && (
+                <div className="flex gap-2">
+                  <input type="date" value={dispatchDateDraft} onChange={(e) => setDispatchDateDraft(e.target.value)}
+                    max={new Date().toISOString().split("T")[0]}
+                    className="flex-1 rounded-md border border-green-500/30 bg-white px-3 py-1.5 text-sm text-[#0f172a] outline-none focus:border-green-500" />
+                  <button onClick={saveDispatchDate} disabled={!dispatchDateDraft}
+                    className="rounded-md bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-40">
+                    Save
+                  </button>
+                  <button onClick={() => setEditingDispatchDate(false)}
+                    className="rounded-md border border-green-500/30 px-3 py-1.5 text-xs font-medium text-green-700 hover:bg-green-500/10">
+                    Cancel
+                  </button>
                 </div>
+              )}
+              {!pk.sampleDispatchedAt && (
+                <>
+                  <div>
+                    <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-[#64748b]">Date dispatched (defaults to today)</label>
+                    <input type="date" value={dispatchDatePick} onChange={(e) => setDispatchDatePick(e.target.value)}
+                      max={new Date().toISOString().split("T")[0]}
+                      className="w-full rounded-md border border-[#bfdbfe]/50 bg-white px-3 py-2 text-sm text-[#0f172a] outline-none focus:border-green-500" />
+                  </div>
+                  <button onClick={markDispatched}
+                    className="w-full rounded-md bg-[#2563eb] py-2 text-xs font-semibold text-white hover:opacity-90">
+                    Mark Sample Dispatched
+                  </button>
+                </>
               )}
             </>
           )}
@@ -1147,6 +1179,13 @@ function ComplianceCard({ product }: { product: ProductRow }) {
     Object.fromEntries(ALL_CERTS.map((c) => [c, gw.compliance?.tracks.find((t) => t.name === c)?.certReceivedAt?.split("T")[0] ?? today]))
   );
   const [editingReceived, setEditingReceived] = useState<Record<string, boolean>>({});
+  const [initiateDrafts, setInitiateDrafts] = useState<Record<string, string>>(
+    Object.fromEntries(ALL_CERTS.map((c) => [c, today]))
+  );
+  const [dispatchDrafts, setDispatchDrafts] = useState<Record<string, string>>(
+    Object.fromEntries(ALL_CERTS.map((c) => [c, gw.compliance?.tracks.find((t) => t.name === c)?.sampleDispatchedAt?.split("T")[0] ?? today]))
+  );
+  const [editingDispatch, setEditingDispatch] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     refreshGolden(product.id);
@@ -1169,7 +1208,7 @@ function ComplianceCard({ product }: { product: ProductRow }) {
 
   async function initiate(cert: ComplianceCertName) {
     try {
-      await api.golden.initiateCompliance(product.id, cert);
+      await api.golden.initiateCompliance(product.id, cert, product.version, initiateDrafts[cert] || undefined);
       await onRefresh();
       addNotification({ targetRoles: NOTIFY_ALL, productId: product.id, productName: product.codeName, message: `Compliance initiated — ${cert}` });
       showToast(`${cert} initiated`);
@@ -1179,9 +1218,19 @@ function ComplianceCard({ product }: { product: ProductRow }) {
   async function markDispatched(cert: ComplianceCertName) {
     const exp = expectedDrafts[cert];
     try {
-      await api.golden.dispatchComplianceSample(product.id, cert, exp || undefined);
+      await api.golden.dispatchComplianceSample(product.id, cert, exp || undefined, product.version, dispatchDrafts[cert] || undefined);
       await onRefresh();
       showToast(`${cert} sample dispatched`);
+    } catch (e: unknown) { showToast(`Error: ${e instanceof Error ? e.message : "Failed"}`); }
+  }
+
+  async function saveDispatchDate(cert: ComplianceCertName) {
+    if (!dispatchDrafts[cert]) return;
+    try {
+      await api.golden.dispatchComplianceSample(product.id, cert, undefined, product.version, dispatchDrafts[cert]);
+      await onRefresh();
+      setEditingDispatch((d) => ({ ...d, [cert]: false }));
+      showToast(`${cert} dispatch date updated`);
     } catch (e: unknown) { showToast(`Error: ${e instanceof Error ? e.message : "Failed"}`); }
   }
 
@@ -1317,11 +1366,20 @@ function ComplianceCard({ product }: { product: ProductRow }) {
               <div className="px-4 py-3 space-y-3">
                 {/* Not initiated */}
                 {!tr && (
-                  <button onClick={() => initiate(cert)}
-                    className="w-full rounded-md border border-dashed py-2 text-xs font-semibold transition hover:opacity-80"
-                    style={{ borderColor: color + "60", color, background: color + "08" }}>
-                    + Initiate {cert} Compliance
-                  </button>
+                  <div className="space-y-2">
+                    <div>
+                      <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-[#64748b]">Date initiated (defaults to today)</label>
+                      <input type="date" value={initiateDrafts[cert] ?? today}
+                        onChange={(e) => setInitiateDrafts((d) => ({ ...d, [cert]: e.target.value }))}
+                        max={today}
+                        className="w-full rounded-md border border-[#bfdbfe]/50 bg-white px-3 py-2 text-sm text-[#0f172a] outline-none focus:border-[#93c5fd]" />
+                    </div>
+                    <button onClick={() => initiate(cert)}
+                      className="w-full rounded-md border border-dashed py-2 text-xs font-semibold transition hover:opacity-80"
+                      style={{ borderColor: color + "60", color, background: color + "08" }}>
+                      + Initiate {cert} Compliance
+                    </button>
+                  </div>
                 )}
 
                 {/* Initiation date + sample dispatch section */}
@@ -1338,19 +1396,51 @@ function ComplianceCard({ product }: { product: ProductRow }) {
                         : <Circle size={13} className="text-[#cbd5e1] shrink-0" />}
                       <div className="flex-1 min-w-0">
                         <p className={`text-xs font-medium ${tr.sampleDispatchedAt ? "text-green-600" : "text-[#94a3b8]"}`}>Sample dispatched</p>
-                        {tr.sampleDispatchedAt && (
+                        {tr.sampleDispatchedAt && !editingDispatch[cert] && (
                           <p className="text-[10px] text-[#64748b] mt-0.5">{fmt(tr.sampleDispatchedAt)}</p>
                         )}
                       </div>
+                      {tr.sampleDispatchedAt && !editingDispatch[cert] && (
+                        <button onClick={() => { setDispatchDrafts((d) => ({ ...d, [cert]: tr.sampleDispatchedAt?.split("T")[0] ?? "" })); setEditingDispatch((d) => ({ ...d, [cert]: true })); }}
+                          className="shrink-0 rounded-md border border-green-500/30 px-2.5 py-1 text-[11px] font-medium text-green-700 hover:bg-green-500/10">
+                          Edit date
+                        </button>
+                      )}
                     </div>
+                    {tr.sampleDispatchedAt && editingDispatch[cert] && (
+                      <div className="flex gap-2">
+                        <input type="date" value={dispatchDrafts[cert] ?? today}
+                          onChange={(e) => setDispatchDrafts((d) => ({ ...d, [cert]: e.target.value }))}
+                          max={today}
+                          className="flex-1 rounded-md border border-green-500/30 bg-white px-2.5 py-1.5 text-sm text-[#0f172a] outline-none focus:border-green-500" />
+                        <button onClick={() => saveDispatchDate(cert)}
+                          className="rounded-md px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90"
+                          style={{ background: color }}>
+                          Save
+                        </button>
+                        <button onClick={() => setEditingDispatch((d) => ({ ...d, [cert]: false }))}
+                          className="rounded-md border border-[#bfdbfe]/50 px-3 py-1.5 text-xs font-medium text-[#64748b] hover:bg-[#eff6ff]">
+                          Cancel
+                        </button>
+                      </div>
+                    )}
 
                     {/* Mark dispatched button — shown before date field */}
                     {!tr.sampleDispatchedAt && (
-                      <button onClick={() => markDispatched(cert)}
-                        className="w-full rounded-md py-2 text-xs font-semibold text-white hover:opacity-90"
-                        style={{ background: color }}>
-                        Mark Sample Dispatched
-                      </button>
+                      <>
+                        <div>
+                          <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-[#64748b]">Date dispatched (defaults to today)</label>
+                          <input type="date" value={dispatchDrafts[cert] ?? today}
+                            onChange={(e) => setDispatchDrafts((d) => ({ ...d, [cert]: e.target.value }))}
+                            max={today}
+                            className="w-full rounded-md border border-[#bfdbfe]/50 bg-white px-3 py-2 text-sm text-[#0f172a] outline-none focus:border-[#93c5fd]" />
+                        </div>
+                        <button onClick={() => markDispatched(cert)}
+                          className="w-full rounded-md py-2 text-xs font-semibold text-white hover:opacity-90"
+                          style={{ background: color }}>
+                          Mark Sample Dispatched
+                        </button>
+                      </>
                     )}
 
                     {/* Expected certification date — separate field + button */}

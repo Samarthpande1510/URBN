@@ -79,6 +79,12 @@ class CertReceivedReq(BaseModel):
 class CertDispatchReq(BaseModel):
     name: str
     expected_delivery_date: Optional[str] = None
+    dispatched_date: Optional[str] = None  # optional backdate for when the sample was dispatched
+
+
+class InitiateComplianceReq(BaseModel):
+    name: str
+    initiated_date: Optional[str] = None  # optional backdate for when compliance was initiated
 
 
 class CertExpectedDateReq(BaseModel):
@@ -92,6 +98,7 @@ class VendorReq(BaseModel):
 
 class PackagingDispatchReq(BaseModel):
     expected_delivery_date: Optional[str] = None
+    dispatched_date: Optional[str] = None  # optional backdate for when the sample was dispatched
 
 
 class PackagingExpectedDateReq(BaseModel):
@@ -258,7 +265,7 @@ def set_compliance_needed(
 @router.post("/{product_id}/compliance/initiate")
 def initiate_compliance(
     product_id: int,
-    data: CertNameReq,
+    data: InitiateComplianceReq,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role("CEO", "Dev", "Purchase")),
 ):
@@ -272,7 +279,7 @@ def initiate_compliance(
         db.add(ComplianceTrack(
             workflow_id=wf.id,
             name=data.name,
-            initiated_at=datetime.utcnow(),
+            initiated_at=datetime.fromisoformat(data.initiated_date) if data.initiated_date else datetime.utcnow(),
         ))
     log(db, product_id, f"Compliance initiated — {data.name}", current_user)
     push_notification(db, product_id, p.code_name, f"Compliance initiated — {data.name}.", NOTIFY_ALL)
@@ -290,7 +297,7 @@ def dispatch_compliance_sample(
     wf = get_workflow_or_404(product_id, db)
     p = db.query(Product).filter(Product.id == product_id).first()
     tr = get_cert_or_404(wf.id, data.name, db)
-    tr.sample_dispatched_at = datetime.utcnow()
+    tr.sample_dispatched_at = datetime.fromisoformat(data.dispatched_date) if data.dispatched_date else datetime.utcnow()
     if data.expected_delivery_date:
         tr.expected_delivery_date = data.expected_delivery_date
     log(db, product_id, f"Compliance sample dispatched — {data.name}", current_user)
@@ -416,7 +423,7 @@ def dispatch_packaging_sample(
     pk = db.query(PackagingTrack).filter(PackagingTrack.workflow_id == wf.id).first()
     if not pk:
         raise HTTPException(status_code=400, detail="Set vendor first")
-    pk.sample_dispatched_at = datetime.utcnow()
+    pk.sample_dispatched_at = datetime.fromisoformat(data.dispatched_date) if data.dispatched_date else datetime.utcnow()
     if data.expected_delivery_date:
         pk.expected_delivery_date = data.expected_delivery_date
     log(db, product_id, f"Packaging sample dispatched (v{pk.sample_version})", current_user)

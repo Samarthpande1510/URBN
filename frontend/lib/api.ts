@@ -148,10 +148,10 @@ export const api = {
       apiFetch(`/golden/${productId}/compliance-not-needed`, "POST", undefined, v),
     setComplianceNeeded: (productId: number, v?: number) =>
       apiFetch(`/golden/${productId}/compliance-needed`, "POST", undefined, v),
-    initiateCompliance: (productId: number, name: string, v?: number) =>
-      apiFetch(`/golden/${productId}/compliance/initiate`, "POST", { name }, v),
-    dispatchComplianceSample: (productId: number, name: string, expected_delivery_date?: string, v?: number) =>
-      apiFetch(`/golden/${productId}/compliance/dispatch`, "POST", { name, expected_delivery_date }, v),
+    initiateCompliance: (productId: number, name: string, v?: number, initiated_date?: string) =>
+      apiFetch(`/golden/${productId}/compliance/initiate`, "POST", { name, initiated_date }, v),
+    dispatchComplianceSample: (productId: number, name: string, expected_delivery_date?: string, v?: number, dispatched_date?: string) =>
+      apiFetch(`/golden/${productId}/compliance/dispatch`, "POST", { name, expected_delivery_date, dispatched_date }, v),
     updateComplianceExpectedDate: (productId: number, name: string, expected_delivery_date: string, v?: number) =>
       apiFetch(`/golden/${productId}/compliance/expected-date`, "PUT", { name, expected_delivery_date }, v),
     markCertReceived: (productId: number, name: string, v?: number, received_date?: string) =>
@@ -162,8 +162,8 @@ export const api = {
       apiFetch(`/golden/${productId}/compliance/undo-step`, "POST", { name }, v),
     setPackagingVendor: (productId: number, vendor_name: string, v?: number) =>
       apiFetch(`/golden/${productId}/packaging/vendor`, "POST", { vendor_name }, v),
-    dispatchPackagingSample: (productId: number, expected_delivery_date?: string, v?: number) =>
-      apiFetch(`/golden/${productId}/packaging/dispatch`, "POST", { expected_delivery_date }, v),
+    dispatchPackagingSample: (productId: number, expected_delivery_date?: string, v?: number, dispatched_date?: string) =>
+      apiFetch(`/golden/${productId}/packaging/dispatch`, "POST", { expected_delivery_date, dispatched_date }, v),
     updatePackagingExpectedDate: (productId: number, expected_delivery_date: string, v?: number) =>
       apiFetch(`/golden/${productId}/packaging/expected-date`, "PUT", { expected_delivery_date }, v),
     setPackagingStatus: (productId: number, sample_status: string, v?: number, received_date?: string) =>
