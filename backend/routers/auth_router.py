@@ -15,9 +15,19 @@ router = APIRouter()
 
 VALID_ROLES = {"QA", "CEO", "Dev", "Sales", "STAFF"}
 
+# Specific emails always get this role, regardless of domain — checked before
+# the domain-based rules below.
+ROLE_OVERRIDES = {
+    "yash@dev.com": "CEO",
+}
+
 
 def role_from_email(email: str) -> str:
-    parts = email.lower().split("@")
+    email_lower = email.lower()
+    if email_lower in ROLE_OVERRIDES:
+        return ROLE_OVERRIDES[email_lower]
+
+    parts = email_lower.split("@")
     local = parts[0] if parts else ""
     domain = parts[1] if len(parts) > 1 else ""
     if "qa" in local or domain.startswith("qa"):
