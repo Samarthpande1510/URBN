@@ -129,7 +129,7 @@ export default function NotificationsPage() {
 
       {/* Legend */}
       <div className="mt-3 flex items-center gap-4 text-[11px] text-slate-400">
-        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-red-400 inline-block" />Action needed — rejection, CEO decisions</span>
+        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-red-400 inline-block" />Action needed — rejection, Yash&apos;s decisions</span>
         <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-amber-400 inline-block" />Update — status changes, approvals</span>
         <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-slate-300 inline-block" />Info — general activity</span>
       </div>

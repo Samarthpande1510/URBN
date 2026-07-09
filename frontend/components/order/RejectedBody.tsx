@@ -199,7 +199,7 @@ export function RejectedBody() {
                   Last Status update
                 </th>
                 <th className="px-4 py-3 font-medium">
-                  CEO Decision
+                  Yash&apos;s Decision
                 </th>
               </tr>
             </thead>
