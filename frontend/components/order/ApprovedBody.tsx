@@ -36,6 +36,7 @@ const STAGE_PILL_STYLE: Record<string, string> = {
   "ORDER PLACED":                "bg-green-500/15 text-green-400 border-green-500/30",
   "ORDER HELD":                  "bg-amber-500/10 text-amber-400 border-amber-500/25",
   "ORDER DROPPED":               "bg-red-500/10 text-red-400 border-red-500/25",
+  "APPROVED":                    "bg-green-500/15 text-green-400 border-green-500/30",
 };
 const DEFAULT_PILL = "bg-[#eff6ff] text-[#64748b] border-[#bfdbfe]/60";
 
@@ -83,7 +84,16 @@ function getPipelineTrail(p: ProductRow): string[] {
 
   if (p.status === "Approved" || p.status === "Pending NPD" || p.status === "Pending Decision") {
     if (fc?.replyReceivedAt) { stages.push("EMAILED TO FACTORY"); stages.push("REVISED SAMPLE REQUESTED"); stages.push("REVISED SAMPLE RECEIVED"); }
-    if (!gw?.purchaseNotifiedAt) { stages.push(p.status === "Pending Decision" ? "DECISION PENDING" : "GOLDEN SAMPLES PENDING"); return stages; }
+    if (!gw?.purchaseNotifiedAt) {
+      // Order Confirmation view shows the order decision status (Approved / Hold / Dropped),
+      // never "Golden Samples Pending" — that stage only belongs in the Golden Sample tab.
+      if (p.status === "Pending Decision") { stages.push("DECISION PENDING"); return stages; }
+      if (od?.state === "placed") stages.push("ORDER PLACED");
+      else if (od?.state === "held") stages.push("ORDER HELD");
+      else if (od?.state === "dropped") stages.push("ORDER DROPPED");
+      else stages.push("APPROVED");
+      return stages;
+    }
     stages.push("PURCHASE TEAM NOTIFIED");
     if (gw.orderConfirmedAt) stages.push("ORDER CONFIRMED");
     if (gw.details) stages.push("PRODUCT DETAILS SAVED");

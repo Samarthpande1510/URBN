@@ -1,3 +1,5 @@
+import { startLoading, stopLoading, isSilent } from "@/lib/loading";
+
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 export class ConflictError extends Error {
@@ -30,40 +32,46 @@ async function refreshAccessToken(): Promise<string | null> {
 }
 
 async function apiFetch(path: string, method = "GET", body?: unknown, v?: number) {
-  const token = typeof window !== "undefined" ? localStorage.getItem("urbn_access_token") : null;
-  const url = v !== undefined ? `${API}${path}?v=${v}` : `${API}${path}`;
-  const makeOpts = (tok: string | null): RequestInit => ({
-    method,
-    headers: {
-      "Content-Type": "application/json",
-      ...(tok ? { Authorization: `Bearer ${tok}` } : {}),
-    },
-    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-  });
+  const silent = isSilent();
+  if (!silent) startLoading();
+  try {
+    const token = typeof window !== "undefined" ? localStorage.getItem("urbn_access_token") : null;
+    const url = v !== undefined ? `${API}${path}?v=${v}` : `${API}${path}`;
+    const makeOpts = (tok: string | null): RequestInit => ({
+      method,
+      headers: {
+        "Content-Type": "application/json",
+        ...(tok ? { Authorization: `Bearer ${tok}` } : {}),
+      },
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    });
 
-  let res = await fetch(url, makeOpts(token));
+    let res = await fetch(url, makeOpts(token));
 
-  // Token expired — try to refresh once and retry
-  if (res.status === 401) {
-    const newToken = await refreshAccessToken();
-    if (newToken) {
-      res = await fetch(url, makeOpts(newToken));
-    } else {
-      // Refresh also failed — clear session and redirect to login (only if not already there)
-      if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
-        localStorage.removeItem("urbn_access_token");
-        localStorage.removeItem("urbn_refresh_token");
-        localStorage.removeItem("urbn_session");
-        window.location.href = "/login";
+    // Token expired — try to refresh once and retry
+    if (res.status === 401) {
+      const newToken = await refreshAccessToken();
+      if (newToken) {
+        res = await fetch(url, makeOpts(newToken));
+      } else {
+        // Refresh also failed — clear session and redirect to login (only if not already there)
+        if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
+          localStorage.removeItem("urbn_access_token");
+          localStorage.removeItem("urbn_refresh_token");
+          localStorage.removeItem("urbn_session");
+          window.location.href = "/login";
+        }
+        throw new Error("Session expired. Please log in again.");
       }
-      throw new Error("Session expired. Please log in again.");
     }
-  }
 
-  const data = await res.json().catch(() => ({}));
-  if (res.status === 409) throw new ConflictError();
-  if (!res.ok) throw new Error(data.detail ?? `Request failed (${res.status})`);
-  return data;
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 409) throw new ConflictError();
+    if (!res.ok) throw new Error(data.detail ?? `Request failed (${res.status})`);
+    return data;
+  } finally {
+    if (!silent) stopLoading();
+  }
 }
 
 /**
@@ -146,6 +154,8 @@ export const api = {
       apiFetch(`/golden/${productId}/compliance/cert-received`, "POST", { name }, v),
     confirmCompliance: (productId: number, name: string, v?: number) =>
       apiFetch(`/golden/${productId}/compliance/confirm`, "POST", { name }, v),
+    undoComplianceStep: (productId: number, name: string, v?: number) =>
+      apiFetch(`/golden/${productId}/compliance/undo-step`, "POST", { name }, v),
     setPackagingVendor: (productId: number, vendor_name: string, v?: number) =>
       apiFetch(`/golden/${productId}/packaging/vendor`, "POST", { vendor_name }, v),
     dispatchPackagingSample: (productId: number, expected_delivery_date?: string, v?: number) =>
@@ -160,6 +170,12 @@ export const api = {
       apiFetch(`/golden/${productId}/packaging/kld-acknowledged`, "POST", undefined, v),
     kldEmail: (productId: number, v?: number) =>
       apiFetch(`/golden/${productId}/packaging/kld-emailed`, "POST", undefined, v),
+    resetPackagingDecision: (productId: number, v?: number) =>
+      apiFetch(`/golden/${productId}/packaging/reset-decision`, "POST", undefined, v),
+    kldUndo: (productId: number, v?: number) =>
+      apiFetch(`/golden/${productId}/packaging/kld-undo`, "POST", undefined, v),
+    undoPackagingDispatch: (productId: number, v?: number) =>
+      apiFetch(`/golden/${productId}/packaging/undo-dispatch`, "POST", undefined, v),
     requestGoldenSample: (productId: number, expected_date?: string, v?: number) =>
       apiFetch(`/golden/${productId}/golden-sample/request`, "POST", { expected_date }, v),
     updateGoldenSampleExpectedDate: (productId: number, expected_date: string, v?: number) =>

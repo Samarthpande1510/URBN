@@ -731,31 +731,18 @@ export function GridBeam({
   className,
   style,
   borderRadius,
-  rows,
-  cols,
-  colorVariant,
-  theme,
-  active,
-  duration,
-  strength,
-  breathe,
+  // Beam-specific props are intentionally destructured out (and ignored) so the
+  // animated grid beams are disabled app-wide while keeping every call site intact.
+  rows: _rows,
+  cols: _cols,
+  colorVariant: _colorVariant,
+  theme: _theme,
+  active: _active,
+  duration: _duration,
+  strength: _strength,
+  breathe: _breathe,
   ...props
 }: GridBeamProps) {
-  const {
-    canvasRef,
-    rows: r,
-    cols: c,
-  } = useGridBeam({
-    rows,
-    cols,
-    colorVariant,
-    theme,
-    active,
-    duration,
-    strength,
-    breathe,
-  })
-
   return (
     <div
       className={cn("relative overflow-hidden", className)}
@@ -763,9 +750,7 @@ export function GridBeam({
       style={{ borderRadius, ...style }}
       {...props}
     >
-      <GridBeamDividers cols={c} rows={r} />
-      <GridBeamCanvas borderRadius={borderRadius} ref={canvasRef as React.RefObject<HTMLCanvasElement>} />
-      <GridBeamContent>{children}</GridBeamContent>
+      {children}
     </div>
   )
 }

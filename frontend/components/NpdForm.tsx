@@ -6,7 +6,7 @@ import { api, apiErrorMessage } from "@/lib/api";
 import { PRIORITY_DOT } from "@/lib/colors";
 import { Chip } from "@/components/Chip";
 import { useToast } from "@/components/Toast";
-import { ChevronDown, ChevronUp, FileText, X, Upload } from "lucide-react";
+import { ChevronDown, ChevronUp, FileText, X, Upload, CheckCircle2, PackageCheck } from "lucide-react";
 import { uploadFile } from "@/lib/upload";
 
 function fmt(value: string | null) {
@@ -100,6 +100,23 @@ export function NpdForm({ p, onSubmit }: { p: ProductRow; onSubmit?: () => void 
 
   const sampleNotReceived = !p.sampleReceived;
 
+  const [markingSample, setMarkingSample] = useState(false);
+  async function markReceived() {
+    setMarkingSample(true);
+    try {
+      const today = new Date().toISOString().split("T")[0];
+      await api.products.update(p.id, { sample_received: true, sample_given_date: today }, p.version);
+      await refreshProducts();
+      showToast("Sample marked received");
+    } catch (err: unknown) {
+      const { message, isConflict } = apiErrorMessage(err);
+      if (isConflict) await refreshProducts();
+      showToast(isConflict ? message : `Error: ${message}`);
+    } finally {
+      setMarkingSample(false);
+    }
+  }
+
   return (
     <div className="overflow-hidden">
       {/* Header */}
@@ -116,12 +133,30 @@ export function NpdForm({ p, onSubmit }: { p: ProductRow; onSubmit?: () => void 
         <Chip color={PRIORITY_DOT[p.priority]} label={p.priority} />
       </div>
 
-      {/* Sample not received lock */}
-      {sampleNotReceived && (
-        <div className="mx-5 mt-4 rounded-md border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-600">
-          Sample not yet received — mark the sample as received before submitting an NPD report.
-        </div>
-      )}
+      {/* Sample received — big action at the top of the form */}
+      <div className="mx-5 mt-4">
+        {p.sampleReceived ? (
+          <div className="flex items-center gap-2 rounded-lg border border-green-500/30 bg-green-500/10 px-4 py-3 text-sm font-semibold text-green-600">
+            <CheckCircle2 size={18} className="shrink-0" />
+            Sample received{p.sampleGivenDate ? ` — ${new Date(p.sampleGivenDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}` : ""}
+          </div>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={markReceived}
+              disabled={markingSample}
+              className="flex w-full items-center justify-center gap-2 rounded-lg border-2 border-green-500/50 bg-green-500/10 px-4 py-4 text-base font-bold text-green-600 transition hover:bg-green-500/20 disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              <PackageCheck size={20} />
+              {markingSample ? "Marking…" : "Sample received?"}
+            </button>
+            <p className="mt-2 text-center text-xs text-amber-600">
+              Confirm the sample has arrived to unlock the NPD report below.
+            </p>
+          </>
+        )}
+      </div>
 
       {/* Form */}
       <form onSubmit={submit} className={`px-5 py-5 space-y-5 ${sampleNotReceived ? "pointer-events-none opacity-40 select-none" : ""}`}>

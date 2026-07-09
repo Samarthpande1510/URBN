@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import Optional
 from database import get_db
-from email_service import send_rejection_email
+from email_service import send_rejection_email, send_product_added_email, send_product_approved_email
 from models import (
     Product, ActivityLog, NpdReport, FactoryComm,
     FactoryCommEdit, GoldenWorkflow, GoldenSampleTrack, Notification, OrderDecision,
@@ -39,6 +39,33 @@ def _fire_rejection_email(p, actor, db: Session):
         print(f"[email] Rejection email sent for {p.code_name}")
     except Exception as e:
         print(f"[email] Rejection email error: {e}")
+
+
+def _fire_product_added_email(p, actor):
+    try:
+        send_product_added_email(
+            product_name=p.code_name,
+            factory=p.factory,
+            priority=p.priority,
+            deadline=p.deadline,
+            created_by=actor.name,
+        )
+        print(f"[email] Product-added email sent for {p.code_name}")
+    except Exception as e:
+        print(f"[email] Product-added email error: {e}")
+
+
+def _fire_product_approved_email(p, actor):
+    try:
+        send_product_approved_email(
+            product_name=p.code_name,
+            factory=p.factory,
+            approved_by=actor.name,
+            remarks=p.verdict_remarks,
+        )
+        print(f"[email] Product-approved email sent for {p.code_name}")
+    except Exception as e:
+        print(f"[email] Product-approved email error: {e}")
 
 
 # ── helpers ───────────────────────────────────────────────────────────────
@@ -195,8 +222,12 @@ def _serialize_golden_workflow(gw, db):
             for t in ct
         ],
         "packaging_initiated": pt is not None,
+        "packaging_vendor_name": pt.vendor_name if pt else None,
         "packaging_sample_version": pt.sample_version if pt else 1,
+        "packaging_sample_dispatched_at": pt.sample_dispatched_at.isoformat() if pt and pt.sample_dispatched_at else None,
+        "packaging_sample_status": pt.sample_status if pt else None,
         "packaging_sample_received_at": pt.sample_received_at.isoformat() if pt and pt.sample_received_at else None,
+        "packaging_improvement_notes": pt.improvement_notes if pt else None,
         "packaging_kld_acknowledged_at": pt.kld_acknowledged_at.isoformat() if pt and pt.kld_acknowledged_at else None,
         "packaging_kld_emailed_at": pt.kld_emailed_to_designer_at.isoformat() if pt and pt.kld_emailed_to_designer_at else None,
         "packaging_decision": pt.decision if pt else None,
@@ -308,6 +339,7 @@ def create_product(
     log(db, product.id, "Product added", current_user)
     db.commit()
     db.refresh(product)
+    _fire_product_added_email(product, current_user)
     return product
 
 
@@ -428,6 +460,8 @@ def ceo_decision(
 
     if data.decision == "Rejected":
         _fire_rejection_email(p, current_user, db)
+    elif data.decision == "Approved":
+        _fire_product_approved_email(p, current_user)
 
     return {"message": f"Product {data.decision.lower()}", "status": p.status}
 

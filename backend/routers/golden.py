@@ -341,6 +341,34 @@ def confirm_compliance(
     return {"message": f"{data.name} confirmed"}
 
 
+@router.post("/{product_id}/compliance/undo-step")
+def undo_compliance_step(
+    product_id: int,
+    data: CertNameReq,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("CEO", "Dev", "Purchase")),
+):
+    """Undo the most recent step of a compliance track:
+    confirmed → cert received → sample dispatched → (delete the track)."""
+    wf = get_workflow_or_404(product_id, db)
+    tr = get_cert_or_404(wf.id, data.name, db)
+    if tr.confirmed_at:
+        tr.confirmed_at = None
+        msg = f"{data.name} confirmation undone"
+    elif tr.cert_received_at:
+        tr.cert_received_at = None
+        msg = f"{data.name} certificate-received undone"
+    elif tr.sample_dispatched_at:
+        tr.sample_dispatched_at = None
+        msg = f"{data.name} dispatch undone"
+    else:
+        db.delete(tr)
+        msg = f"{data.name} initiation removed"
+    log(db, product_id, msg, current_user)
+    db.commit()
+    return {"message": msg}
+
+
 # ── packaging ─────────────────────────────────────────────────────────────
 
 @router.post("/{product_id}/packaging/vendor")
@@ -456,6 +484,47 @@ def decide_packaging(
     return {"message": data.decision}
 
 
+@router.post("/{product_id}/packaging/reset-decision")
+def reset_packaging_decision(
+    product_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("CEO", "Dev", "Purchase")),
+):
+    """Undo the packaging sample decision so it can be re-decided. Clears the
+    approval + any KLD progress that followed it."""
+    wf = get_workflow_or_404(product_id, db)
+    p = db.query(Product).filter(Product.id == product_id).first()
+    pk = db.query(PackagingTrack).filter(PackagingTrack.workflow_id == wf.id).first()
+    if not pk:
+        raise HTTPException(status_code=400, detail="No packaging track")
+    pk.decision = None
+    pk.decision_at = None
+    pk.kld_acknowledged_at = None
+    pk.kld_emailed_to_designer_at = None
+    log(db, product_id, "Packaging decision reset — re-opened for editing", current_user)
+    db.commit()
+    return {"message": "Packaging decision reset"}
+
+
+@router.post("/{product_id}/packaging/undo-dispatch")
+def undo_packaging_dispatch(
+    product_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("CEO", "Dev", "Purchase")),
+):
+    """Undo the sample-dispatched step and any status that followed it."""
+    wf = get_workflow_or_404(product_id, db)
+    pk = db.query(PackagingTrack).filter(PackagingTrack.workflow_id == wf.id).first()
+    if not pk:
+        raise HTTPException(status_code=400, detail="No packaging track")
+    pk.sample_dispatched_at = None
+    pk.sample_status = None
+    pk.sample_received_at = None
+    log(db, product_id, "Packaging dispatch undone", current_user)
+    db.commit()
+    return {"message": "Dispatch undone"}
+
+
 @router.post("/{product_id}/packaging/kld-acknowledged")
 def kld_acknowledged(
     product_id: int,
@@ -490,6 +559,28 @@ def kld_emailed_to_designer(
     push_notification(db, product_id, p.code_name, "KLD emailed to designer — packaging complete.", NOTIFY_ALL)
     db.commit()
     return {"message": "KLD emailed to designer"}
+
+
+@router.post("/{product_id}/packaging/kld-undo")
+def kld_undo(
+    product_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("CEO", "Dev", "Purchase")),
+):
+    """Undo the latest KLD step: emailed → acknowledged → none."""
+    wf = get_workflow_or_404(product_id, db)
+    pk = db.query(PackagingTrack).filter(PackagingTrack.workflow_id == wf.id).first()
+    if not pk:
+        raise HTTPException(status_code=400, detail="No packaging track")
+    if pk.kld_emailed_to_designer_at:
+        pk.kld_emailed_to_designer_at = None
+        msg = "KLD emailed step undone"
+    else:
+        pk.kld_acknowledged_at = None
+        msg = "KLD received step undone"
+    log(db, product_id, msg, current_user)
+    db.commit()
+    return {"message": msg}
 
 
 # ── golden sample ─────────────────────────────────────────────────────────

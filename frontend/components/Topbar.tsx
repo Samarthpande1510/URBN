@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Modal } from "./Modal";
 import { useProducts } from "@/lib/products-context";
 import { getSession, Session } from "@/lib/auth";
-import { Menu, Search } from "lucide-react";
+import { Menu, Search, Upload, ZoomIn, X } from "lucide-react";
 import { NotificationBell } from "./NotificationBell";
 import { uploadFile } from "@/lib/upload";
 
@@ -34,6 +34,7 @@ const emptyForm = {
   const [imageName, setImageName] = useState<string | null>(null);
   const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [zoomOpen, setZoomOpen] = useState(false);
 
   useEffect(() => {
     setSession(getSession());
@@ -225,25 +226,48 @@ const emptyForm = {
                 }
               }}
             />
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="relative w-full overflow-hidden rounded-md border-2 border-dashed border-[#bfdbfe]/50 bg-[#ffffff] text-sm text-[#1d4ed8] hover:bg-[#eff6ff]"
-            >
-              {uploading ? (
-                <div className="flex flex-col items-center justify-center py-8">
-                  <span className="animate-pulse text-sm">Uploading…</span>
+            {uploading ? (
+              <div className="flex h-56 w-full flex-col items-center justify-center gap-2 rounded-md border-2 border-dashed border-[#bfdbfe]/50 bg-[#eff6ff] text-[#1d4ed8]">
+                <span className="block h-6 w-6 rounded-full border-[3px] border-blue-100 border-t-blue-600 animate-spin" />
+                <span className="animate-pulse text-sm">Uploading & compressing…</span>
+              </div>
+            ) : imageDataUrl ? (
+              <div className="overflow-hidden rounded-md border border-[#bfdbfe]/60 bg-[#f8fbff]">
+                {/* Full image, uncropped — click to zoom */}
+                <button
+                  type="button"
+                  onClick={() => setZoomOpen(true)}
+                  className="group relative block w-full"
+                  title="Click to zoom"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={imageDataUrl} alt="product preview" className="mx-auto max-h-64 w-full object-contain" />
+                  <span className="absolute right-2 top-2 flex items-center gap-1 rounded-md bg-black/55 px-2 py-1 text-[11px] font-medium text-white opacity-0 transition group-hover:opacity-100">
+                    <ZoomIn size={12} /> Zoom
+                  </span>
+                </button>
+                <div className="flex items-center justify-between gap-2 border-t border-[#bfdbfe]/50 bg-white px-3 py-2">
+                  <span className="min-w-0 flex-1 truncate text-xs text-[#64748b]">{imageName}</span>
+                  <div className="flex shrink-0 gap-2">
+                    <button type="button" onClick={() => fileInputRef.current?.click()}
+                      className="text-xs font-medium text-[#1d4ed8] hover:underline">Replace</button>
+                    <button type="button"
+                      onClick={() => { setImageName(null); setImageDataUrl(null); if (fileInputRef.current) fileInputRef.current.value = ""; }}
+                      className="text-xs font-medium text-red-500 hover:underline">Remove</button>
+                  </div>
                 </div>
-              ) : imageDataUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={imageDataUrl} alt="preview" className="h-40 w-full object-cover" />
-              ) : (
-                <div className="flex flex-col items-center justify-center py-8">
-                  <span className="text-2xl">↑</span>
-                  <span className="mt-2">Click to upload photo</span>
-                </div>
-              )}
-            </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="flex h-40 w-full flex-col items-center justify-center gap-2 rounded-md border-2 border-dashed border-[#bfdbfe]/50 bg-[#ffffff] text-sm text-[#1d4ed8] transition hover:border-[#93c5fd] hover:bg-[#eff6ff]"
+              >
+                <Upload size={22} className="text-[#93c5fd]" />
+                <span className="font-medium">Click to upload photo</span>
+                <span className="text-xs text-[#94a3b8]">PNG, JPG or WebP — compressed automatically</span>
+              </button>
+            )}
           </div>
 
           <div className="flex gap-3 pt-2">
@@ -271,6 +295,30 @@ const emptyForm = {
           </div>
         </form>
       </Modal>
+
+      {/* Full-screen image zoom lightbox */}
+      {zoomOpen && imageDataUrl && (
+        <div
+          className="fixed inset-0 z-[4000] flex items-center justify-center bg-black/80 p-6 backdrop-blur-sm"
+          onClick={() => setZoomOpen(false)}
+        >
+          <button
+            type="button"
+            onClick={() => setZoomOpen(false)}
+            className="absolute right-5 top-5 rounded-full bg-white/10 p-2 text-white transition hover:bg-white/20"
+            title="Close"
+          >
+            <X size={20} />
+          </button>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={imageDataUrl}
+            alt="product full preview"
+            className="max-h-full max-w-full rounded-lg object-contain shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </>
   );
 }

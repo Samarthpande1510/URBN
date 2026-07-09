@@ -615,6 +615,33 @@ function GoldenCard({ product, isQA }: { product: ProductRow; isQA: boolean }) {
   );
 }
 
+// Cumulative packaging stage trail — stacks each completed stage instead of
+// showing only the latest one.
+function getPackagingTrail(pk: GoldenWorkflow["packaging"]): { label: string; cls: string }[] {
+  const grey  = "border-[#bfdbfe]/40 bg-[#f8faff] text-[#94a3b8]";
+  const sky   = "border-sky-500/30 bg-sky-500/10 text-sky-600";
+  const amberD = "border-amber-400/30 bg-amber-400/10 text-amber-500";
+  const amberR = "border-amber-500/30 bg-amber-500/10 text-amber-600";
+  const green = "border-green-500/30 bg-green-500/10 text-green-600";
+  const red   = "border-red-500/30 bg-red-500/10 text-red-500";
+  if (!pk) return [{ label: "Not started", cls: grey }];
+  const v = pk.sampleVersion ?? 1;
+  const t: { label: string; cls: string }[] = [{ label: "Vendor confirmed", cls: sky }];
+  if (pk.sampleDispatchedAt) {
+    t.push({ label: `Sample dispatched${v > 1 ? ` (v${v})` : ""}`, cls: amberD });
+    const received = !!pk.sampleReceivedAt || pk.sampleStatus === "Received";
+    t.push({ label: "Awaiting sample", cls: amberR });
+    if (received) t.push({ label: "Sample received", cls: amberR });
+  }
+  if (pk.improvementNotes && !pk.decision && !pk.sampleDispatchedAt) {
+    t.push({ label: `Improvement required — v${v}`, cls: red });
+  }
+  if (pk.decision === "Approved") t.push({ label: "Sample approved", cls: sky });
+  if (pk.kldAcknowledgedAt) t.push({ label: "KLD acknowledged", cls: sky });
+  if (pk.kldEmailedToDesignerAt) t.push({ label: "KLD sent to designer", cls: green });
+  return t;
+}
+
 // ─── Packaging Development card ───────────────────────────────────────────────
 
 function PackagingCard({ product }: { product: ProductRow }) {
@@ -624,6 +651,7 @@ function PackagingCard({ product }: { product: ProductRow }) {
   const pk = gw.packaging;
 
   const [vendorDraft, setVendorDraft] = useState(pk?.vendorName ?? "");
+  const [editingVendor, setEditingVendor] = useState(false);
   const [expectedDate, setExpectedDate] = useState(pk?.expectedDeliveryDate ?? "");
   const [improvNotes, setImprovNotes] = useState("");
 
@@ -645,8 +673,18 @@ function PackagingCard({ product }: { product: ProductRow }) {
     try {
       await api.golden.setPackagingVendor(product.id, vendorDraft.trim(), product.version);
       await onRefresh();
+      setEditingVendor(false);
       addNotification({ targetRoles: NOTIFY_ALL, productId: product.id, productName: product.codeName, message: `Packaging vendor selected — ${vendorDraft.trim()}` });
       showToast("Vendor confirmed");
+    } catch (e: unknown) { showToast(`Error: ${e instanceof Error ? e.message : "Failed"}`); }
+  }
+
+  async function undoDispatch() {
+    if (!pk) return;
+    try {
+      await api.golden.undoPackagingDispatch(product.id, product.version);
+      await onRefresh();
+      showToast("Dispatch undone");
     } catch (e: unknown) { showToast(`Error: ${e instanceof Error ? e.message : "Failed"}`); }
   }
 
@@ -703,6 +741,24 @@ function PackagingCard({ product }: { product: ProductRow }) {
     } catch (e: unknown) { showToast(`Error: ${e instanceof Error ? e.message : "Failed"}`); }
   }
 
+  async function undoDecision() {
+    if (!pk) return;
+    try {
+      await api.golden.resetPackagingDecision(product.id, product.version);
+      await onRefresh();
+      showToast("Decision reopened — you can edit it again");
+    } catch (e: unknown) { showToast(`Error: ${e instanceof Error ? e.message : "Failed"}`); }
+  }
+
+  async function undoKld() {
+    if (!pk) return;
+    try {
+      await api.golden.kldUndo(product.id, product.version);
+      await onRefresh();
+      showToast("KLD step undone");
+    } catch (e: unknown) { showToast(`Error: ${e instanceof Error ? e.message : "Failed"}`); }
+  }
+
   const done = !!pk?.kldEmailedToDesignerAt;
   const v = pk?.sampleVersion ?? 1;
   // After rejection, backend resets decision to null but keeps improvementNotes + increments version
@@ -734,20 +790,32 @@ function PackagingCard({ product }: { product: ProductRow }) {
         {/* 1 — Vendor Selection */}
         <div className="rounded-md border border-[#bfdbfe]/40 bg-white px-4 py-4 space-y-2">
           <p className="text-[10px] font-bold uppercase tracking-wide text-[#1d4ed8]">1 — Vendor Selection</p>
-          {!pk ? (
+          {!pk || editingVendor ? (
             <div className="flex gap-2">
               <input value={vendorDraft} onChange={(e) => setVendorDraft(e.target.value)} placeholder="e.g. PackCo Ltd"
                 className="flex-1 rounded-md border border-[#bfdbfe]/50 bg-[#eff6ff] px-3 py-2 text-sm text-[#0f172a] outline-none focus:border-[#93c5fd] placeholder:text-[#64748b]" />
               <button onClick={confirmVendor} disabled={!vendorDraft.trim()}
                 className="rounded-md bg-[#2563eb] px-4 py-2 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-40">
-                Confirm
+                {pk ? "Save" : "Confirm"}
               </button>
+              {pk && editingVendor && (
+                <button onClick={() => { setEditingVendor(false); setVendorDraft(pk.vendorName ?? ""); }}
+                  className="rounded-md border border-[#bfdbfe]/50 px-3 py-2 text-xs font-medium text-[#64748b] hover:bg-[#eff6ff]">
+                  Cancel
+                </button>
+              )}
             </div>
           ) : (
-            <p className="text-sm font-medium text-[#0f172a] flex items-center gap-2">
-              <CheckCircle size={14} className="text-green-400 shrink-0" /> {pk.vendorName}
-              <span className="text-[10px] text-[#94a3b8] font-normal">{fmt(pk.vendorSetAt)}</span>
-            </p>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-medium text-[#0f172a] flex items-center gap-2 min-w-0">
+                <CheckCircle size={14} className="text-green-400 shrink-0" /> <span className="truncate">{pk.vendorName}</span>
+                <span className="text-[10px] text-[#94a3b8] font-normal shrink-0">{fmt(pk.vendorSetAt)}</span>
+              </p>
+              <button onClick={() => { setVendorDraft(pk.vendorName ?? ""); setEditingVendor(true); }}
+                className="shrink-0 rounded-md border border-[#bfdbfe]/50 px-2.5 py-1 text-[11px] font-medium text-[#64748b] hover:bg-[#eff6ff] hover:text-[#1d4ed8]">
+                Edit
+              </button>
+            </div>
           )}
         </div>
 
@@ -767,6 +835,12 @@ function PackagingCard({ product }: { product: ProductRow }) {
                   <p className={`text-xs font-medium ${pk.sampleDispatchedAt ? "text-green-600" : "text-[#64748b]"}`}>Sample dispatched</p>
                   {pk.sampleDispatchedAt && <p className="text-[10px] text-[#94a3b8] mt-0.5">{fmt(pk.sampleDispatchedAt)}</p>}
                 </div>
+                {pk.sampleDispatchedAt && !pk.decision && (
+                  <button onClick={(e) => { e.preventDefault(); undoDispatch(); }} title="Undo dispatch"
+                    className="shrink-0 rounded-md border border-[#bfdbfe]/50 px-2.5 py-1 text-[11px] font-medium text-[#94a3b8] hover:bg-[#eff6ff] hover:text-[#64748b]">
+                    ↩ Undo
+                  </button>
+                )}
                 {!pk.sampleDispatchedAt && (
                   <input type="checkbox" className="hidden" onChange={(e) => { if (e.target.checked) markDispatched(); }} />
                 )}
@@ -859,7 +933,13 @@ function PackagingCard({ product }: { product: ProductRow }) {
               {/* After approval — KLD steps */}
               {pk.decision === "Approved" && (
                 <div className="space-y-3">
-                  <p className="text-xs text-green-500 flex items-center gap-1 font-medium"><CheckCircle size={12} /> Sample approved {fmt(pk.decisionAt)}</p>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs text-green-500 flex items-center gap-1 font-medium"><CheckCircle size={12} /> Sample approved {fmt(pk.decisionAt)}</p>
+                    <button onClick={undoDecision}
+                      className="rounded-md border border-[#bfdbfe]/50 px-2.5 py-1 text-[11px] font-medium text-[#64748b] hover:bg-[#eff6ff] hover:text-[#1d4ed8] whitespace-nowrap">
+                      ↩ Undo decision
+                    </button>
+                  </div>
 
                   {/* KLD Requested */}
                   <div className={`flex items-center gap-3 rounded-md border px-3 py-2.5 ${pk.kldAcknowledgedAt ? "border-green-500/30 bg-green-500/5" : "border-[#bfdbfe]/30 bg-[#f8faff]"}`}>
@@ -868,10 +948,15 @@ function PackagingCard({ product }: { product: ProductRow }) {
                       <p className={`text-xs font-medium ${pk.kldAcknowledgedAt ? "text-green-600" : "text-[#94a3b8]"}`}>KLD received</p>
                       {pk.kldAcknowledgedAt && <p className="text-[10px] text-[#64748b] mt-0.5">{fmt(pk.kldAcknowledgedAt)}</p>}
                     </div>
-                    {!pk.kldAcknowledgedAt && (
+                    {!pk.kldAcknowledgedAt ? (
                       <button onClick={markKldAcknowledged}
                         className="rounded-md border border-[#93c5fd]/40 bg-[#eff6ff] px-3 py-1.5 text-[11px] font-semibold text-[#1d4ed8] hover:bg-[#dbeafe] whitespace-nowrap">
                         KLD Received
+                      </button>
+                    ) : !pk.kldEmailedToDesignerAt && (
+                      <button onClick={undoKld} title="Undo"
+                        className="rounded-md border border-[#bfdbfe]/50 px-2.5 py-1.5 text-[11px] font-medium text-[#94a3b8] hover:bg-[#eff6ff] hover:text-[#64748b] whitespace-nowrap">
+                        ↩ Undo
                       </button>
                     )}
                   </div>
@@ -887,6 +972,12 @@ function PackagingCard({ product }: { product: ProductRow }) {
                       <button onClick={markEmailedDesigner}
                         className="rounded-md bg-[#2563eb] px-3 py-1.5 text-[11px] font-semibold text-white hover:opacity-90 whitespace-nowrap">
                         Mark Emailed
+                      </button>
+                    )}
+                    {pk.kldEmailedToDesignerAt && (
+                      <button onClick={undoKld} title="Undo"
+                        className="rounded-md border border-[#bfdbfe]/50 px-2.5 py-1.5 text-[11px] font-medium text-[#94a3b8] hover:bg-[#eff6ff] hover:text-[#64748b] whitespace-nowrap">
+                        ↩ Undo
                       </button>
                     )}
                   </div>
@@ -1057,6 +1148,14 @@ function ComplianceCard({ product }: { product: ProductRow }) {
     } catch (e: unknown) { showToast(`Error: ${e instanceof Error ? e.message : "Failed"}`); }
   }
 
+  async function undoStep(cert: ComplianceCertName) {
+    try {
+      await api.golden.undoComplianceStep(product.id, cert, product.version);
+      await onRefresh();
+      showToast(`${cert} — last step undone`);
+    } catch (e: unknown) { showToast(`Error: ${e instanceof Error ? e.message : "Failed"}`); }
+  }
+
   const tracks = gw.compliance?.tracks ?? [];
   const allConfirmed = tracks.length > 0 && tracks.every((tr) => !!tr.confirmedAt);
 
@@ -1133,13 +1232,21 @@ function ComplianceCard({ product }: { product: ProductRow }) {
           return (
             <div key={cert} className={`rounded-md border overflow-hidden ${confirmed ? "border-green-500/30 bg-green-500/5" : tr ? "border-[#bfdbfe]/40 bg-white" : "border-dashed border-[#bfdbfe]/30 bg-[#f8faff]"}`}>
               {/* Track header */}
-              <div className="flex items-center justify-between px-4 py-3 border-b border-[#bfdbfe]/20">
-                <div className="flex items-center gap-2">
-                  {confirmed ? <CheckCircle size={14} className="text-green-400" /> : <Circle size={14} style={{ color: tr ? color : "#cbd5e1" }} />}
+              <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-[#bfdbfe]/20">
+                <div className="flex items-center gap-2 min-w-0">
+                  {tr ? <CheckCircle size={14} className="text-green-500 shrink-0" /> : <Circle size={14} className="shrink-0" style={{ color: "#cbd5e1" }} />}
                   <span className="text-xs font-bold uppercase tracking-wider" style={{ color: tr ? color : "#94a3b8" }}>{cert}</span>
-                  {tr && <span className="text-[10px] text-[#64748b]">Initiated {fmt(tr.initiatedAt)}</span>}
+                  {tr && <span className="text-[10px] text-[#64748b] truncate">Initiated {fmt(tr.initiatedAt)}</span>}
                 </div>
-                {confirmed && <span className="text-[10px] font-semibold text-green-500 flex items-center gap-1"><CheckCircle size={10} /> Confirmed {fmt(tr.confirmedAt)}</span>}
+                <div className="flex items-center gap-2 shrink-0">
+                  {confirmed && <span className="text-[10px] font-semibold text-green-500 flex items-center gap-1"><CheckCircle size={10} /> Confirmed</span>}
+                  {tr && (
+                    <button onClick={() => undoStep(cert)} title="Undo the last completed step"
+                      className="rounded-md border border-[#bfdbfe]/50 px-2 py-1 text-[10px] font-medium text-[#94a3b8] hover:bg-[#eff6ff] hover:text-[#64748b] whitespace-nowrap">
+                      ↩ Undo
+                    </button>
+                  )}
+                </div>
               </div>
 
               <div className="px-4 py-3 space-y-3">
@@ -1581,17 +1688,13 @@ export default function GoldenProductPage() {
                           if (anyDone) return <span className="inline-block rounded border border-violet-500/30 bg-violet-500/10 px-2 py-0.5 text-[11px] font-medium text-violet-600">Partially confirmed</span>;
                           if (tracks.length > 0) return <span className="inline-block rounded border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-600">In progress ({tracks.length} cert{tracks.length > 1 ? "s" : ""})</span>;
                           return <span className="inline-block rounded border border-[#bfdbfe]/40 bg-[#f8faff] px-2 py-0.5 text-[11px] font-medium text-[#94a3b8]">Not initiated</span>;
-                        })() : filter === "Packaging Development" ? (() => {
-                          const pk = gw.packaging;
-                          if (!pk) return <span className="inline-block rounded border border-[#bfdbfe]/40 bg-[#f8faff] px-2 py-0.5 text-[11px] font-medium text-[#94a3b8]">Not started</span>;
-                          if (pk.kldEmailedToDesignerAt) return <span className="inline-block rounded border border-green-500/30 bg-green-500/10 px-2 py-0.5 text-[11px] font-medium text-green-600">KLD sent to designer</span>;
-                          if (pk.kldAcknowledgedAt) return <span className="inline-block rounded border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-[11px] font-medium text-sky-600">KLD acknowledged</span>;
-                          if (pk.decision === "Approved") return <span className="inline-block rounded border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-[11px] font-medium text-sky-600">Sample approved</span>;
-                          if (pk.improvementNotes && !pk.decision && !pk.sampleDispatchedAt) return <span className="inline-block rounded border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-600">Improvement required — v{pk.sampleVersion ?? 1}</span>;
-                          if (pk.sampleReceivedAt) return <span className="inline-block rounded border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-600">Sample received</span>;
-                          if (pk.sampleDispatchedAt) return <span className="inline-block rounded border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 text-[11px] font-medium text-amber-500">Sample dispatched</span>;
-                          return <span className="inline-block rounded border border-sky-400/30 bg-sky-400/10 px-2 py-0.5 text-[11px] font-medium text-sky-500">Vendor confirmed</span>;
-                        })() : filter === "All" ? (
+                        })() : filter === "Packaging Development" ? (
+                          <div className="flex flex-wrap gap-1 max-w-[240px]">
+                            {getPackagingTrail(gw.packaging).map((s, i) => (
+                              <span key={i} className={`inline-block rounded border px-2 py-0.5 text-[11px] font-medium leading-tight whitespace-nowrap ${s.cls}`}>{s.label}</span>
+                            ))}
+                          </div>
+                        ) : filter === "All" ? (
                           <StagePills stages={getPipelineTrail(p)} />
                         ) : (
                           <>

@@ -21,17 +21,24 @@ export async function compressImage(file: File, maxDim = 1600, quality = 0.82): 
 }
 
 async function putToR2(file: Blob, folder: "products" | "npd", contentType: string): Promise<string> {
-  const { upload_url, public_url } = (await api.files.presign(folder, contentType)) as {
-    upload_url: string;
-    public_url: string;
-  };
-  const res = await fetch(upload_url, {
+  let presign: { upload_url: string; public_url: string };
+  try {
+    presign = (await api.files.presign(folder, contentType)) as { upload_url: string; public_url: string };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "";
+    // 404 = endpoint not deployed yet; 503 = R2 credentials not configured on the server.
+    if (/not found/i.test(msg) || /not configured/i.test(msg) || /503/.test(msg)) {
+      throw new Error("File storage isn't set up yet — you can still save without a file for now.");
+    }
+    throw err;
+  }
+  const res = await fetch(presign.upload_url, {
     method: "PUT",
     headers: { "Content-Type": contentType },
     body: file,
   });
   if (!res.ok) throw new Error("File upload failed — please try again.");
-  return public_url;
+  return presign.public_url;
 }
 
 /**

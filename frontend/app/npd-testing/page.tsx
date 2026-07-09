@@ -328,18 +328,6 @@ export default function NpdTestingPage() {
 
   const selected = products.find((p) => p.id === selectedId) ?? null;
 
-  const markSampleReceived = useCallback(async (id: number) => {
-    const today = new Date().toISOString().slice(0, 10);
-    const p = products.find((x) => x.id === id);
-    try {
-      await api.products.update(id, { sample_received: true, sample_given_date: today }, p?.version);
-      await refreshProducts();
-    } catch {
-      // fallback to optimistic update if API fails
-      setProducts((prev) => prev.map((x) => x.id !== id ? x : { ...x, sampleReceived: true, sampleGivenDate: today }));
-    }
-  }, [products, refreshProducts, setProducts]);
-
   const showHistory = npdFilter === "Pass" || npdFilter === "Fail";
 
   return (
@@ -397,7 +385,6 @@ export default function NpdTestingPage() {
                 <th className="px-4 py-3 font-medium text-center">
                   Timeline
                 </th>
-                {!showHistory && <th className="px-4 py-3 font-medium w-40">Sample</th>}
               </tr>
             </thead>
             <tbody>
@@ -485,20 +472,6 @@ export default function NpdTestingPage() {
                           : <span className="text-[#94a3b8] text-xs">Not received</span>
                       )}
                     </td>
-                    {!showHistory && (
-                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                        {p.sampleReceived
-                          ? <span className="text-xs text-green-600 font-medium">✓ Received</span>
-                          : (
-                            <button
-                              onClick={() => markSampleReceived(p.id)}
-                              className="rounded-md border border-green-500/40 bg-green-500/10 px-3 py-1.5 text-xs font-semibold text-green-600 hover:bg-green-500/20 whitespace-nowrap"
-                            >
-                              Sample received?
-                            </button>
-                          )}
-                      </td>
-                    )}
                   </tr>
                 ))
               )}

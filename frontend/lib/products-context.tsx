@@ -3,6 +3,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode, Dispatch, SetStateAction, useCallback } from "react";
 import type { Role } from "./auth";
 import { api } from "./api";
+import { runSilent } from "./loading";
 
 export type Status = "Pending NPD" | "Pending Decision" | "Approved" | "On hold" | "Rejected" | "Archived" | "Removed";
 
@@ -318,16 +319,16 @@ export function mapProductFromApi(raw: Record<string, unknown>): ProductRow {
         })),
       } : null,
       packaging: gw.packaging_initiated ? {
-        vendorName: "",
+        vendorName: (gw.packaging_vendor_name as string | null) ?? "",
         vendorSetAt: null,
         sampleVersion: (gw.packaging_sample_version as number) ?? 1,
-        sampleDispatchedAt: null,
+        sampleDispatchedAt: (gw.packaging_sample_dispatched_at as string | null) ?? null,
         sampleReceivedAt: (gw.packaging_sample_received_at as string | null) ?? null,
-        sampleStatus: null,
+        sampleStatus: (gw.packaging_sample_status as "Received" | "Awaiting" | null) ?? null,
         expectedDeliveryDate: "",
         decision: (gw.packaging_decision as "Approved" | "Improvement Required" | null) ?? null,
         decisionAt: (gw.packaging_decision_at as string | null) ?? null,
-        improvementNotes: null,
+        improvementNotes: (gw.packaging_improvement_notes as string | null) ?? null,
         kldAcknowledgedAt: (gw.packaging_kld_acknowledged_at as string | null) ?? null,
         kldEmailedToDesignerAt: (gw.packaging_kld_emailed_at as string | null) ?? null,
         log: [],
@@ -456,14 +457,26 @@ export function ProductsProvider({ children }: { children: ReactNode }) {
         return fresh.map((np) => {
           const existing = prev.find((ep) => ep.id === np.id);
           if (existing?.goldenWorkflow && np.goldenWorkflow) {
+            const exPk = existing.goldenWorkflow.packaging;
+            const npPk = np.goldenWorkflow.packaging;
             return {
               ...np,
               goldenWorkflow: {
                 ...np.goldenWorkflow,
-                // Prefer full cached data (from refreshGolden) over minimal /products data
+                // details/compliance: /products only carries summary data, so keep the
+                // richer cached copy (from refreshGolden) when we have it.
                 details: existing.goldenWorkflow.details ?? np.goldenWorkflow.details,
                 compliance: existing.goldenWorkflow.compliance ?? np.goldenWorkflow.compliance,
-                packaging: existing.goldenWorkflow.packaging ?? np.goldenWorkflow.packaging,
+                // packaging: /products now carries the full trail, so prefer FRESH values
+                // (so undos/changes reflect on the dashboard) but keep card-only extras.
+                packaging: npPk
+                  ? {
+                      ...npPk,
+                      vendorSetAt: exPk?.vendorSetAt ?? npPk.vendorSetAt,
+                      expectedDeliveryDate: npPk.expectedDeliveryDate || exPk?.expectedDeliveryDate || "",
+                      log: (exPk?.log?.length ? exPk.log : npPk.log) ?? [],
+                    }
+                  : npPk,
                 // Use fresh goldenSample from /products if available, else keep cached
                 goldenSample: np.goldenWorkflow.goldenSample ?? existing.goldenWorkflow.goldenSample,
               },
@@ -496,7 +509,9 @@ export function ProductsProvider({ children }: { children: ReactNode }) {
     if (typeof window === "undefined") return;
     const { getSession } = require("@/lib/auth");
     if (!getSession()) return;
-    const id = setInterval(() => { refreshProducts(); refreshNotifications(); }, 20_000);
+    const id = setInterval(() => {
+      runSilent(() => Promise.all([refreshProducts(), refreshNotifications()]));
+    }, 20_000);
     return () => clearInterval(id);
   }, [refreshProducts]);
 

@@ -3,6 +3,7 @@ import { Inter, Instrument_Serif, Cormorant_Garamond } from "next/font/google";
 import "./globals.css";
 import { ProductsProvider } from "@/lib/products-context";
 import { ToastProvider } from "@/components/Toast";
+import { GlobalLoader } from "@/components/GlobalLoader";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 const instrumentSerif = Instrument_Serif({
@@ -27,7 +28,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body className={`${inter.variable} ${instrumentSerif.variable} ${cormorant.variable} font-sans`}>
-        <ProductsProvider><ToastProvider>{children}</ToastProvider></ProductsProvider>
+        <ProductsProvider><ToastProvider>{children}<GlobalLoader /></ToastProvider></ProductsProvider>
       </body>
     </html>
   );
