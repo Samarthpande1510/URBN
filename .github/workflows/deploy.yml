@@ -1,0 +1,40 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:  # allows manual "Run workflow" trigger from the Actions tab
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            set -e
+            cd /home/samarth/URBN
+
+            echo "==> Pulling latest code"
+            git pull
+
+            echo "==> Backend: syncing deps + running migrations"
+            cd backend
+            export PATH="/home/samarth/URBN/backend/venv/bin:$PATH"
+            uv sync
+            uv run alembic upgrade head
+            sudo systemctl restart urbn-backend
+
+            echo "==> Frontend: rebuilding"
+            cd ../frontend
+            npm install
+            npm run build
+            sudo systemctl restart urbn-frontend
+
+            echo "==> Deploy complete"
+            sudo systemctl status urbn-backend --no-pager | head -5
+            sudo systemctl status urbn-frontend --no-pager | head -5
