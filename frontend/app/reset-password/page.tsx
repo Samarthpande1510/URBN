@@ -80,7 +80,7 @@ function ResetPasswordForm() {
     >
       {done ? (
         <p className="rounded-md border border-green-500/20 bg-green-500/8 px-3.5 py-2.5 text-sm text-green-400">
-          Password reset — taking you to log in…
+          Password reset, taking you to log in…
         </p>
       ) : (
         <form onSubmit={handleSubmit} className="space-y-5" noValidate>

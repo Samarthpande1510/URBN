@@ -440,30 +440,24 @@ export function ApprovedBody({ view = "all" }: { view?: ApprovedView }) {
                 <tr className="border-b border-[#bfdbfe]/40 text-[#0f172a]">
                   <th className="pl-4 pr-2 py-3 w-14" />
                   <th className="px-4 py-3 font-medium">
-                    Product
-                    <p className="text-[10px] font-normal text-[#94a3b8] mt-0.5">Code name · Factory · Internal code</p>
+                    Product Name
                   </th>
                   <th className="px-4 py-3 font-medium w-48">
                     Remarks
-                    <p className="text-[10px] font-normal text-[#94a3b8] mt-0.5">Decision Pending feedback</p>
                   </th>
                   <th className="px-4 py-3 font-medium">
-                    Stages
-                    <p className="text-[10px] font-normal text-[#94a3b8] mt-0.5">Pipeline trail</p>
+                    Pipeline Stages
                   </th>
                   <th className="px-4 py-3 font-medium">
-                    Last updated
-                    <p className="text-[10px] font-normal text-[#94a3b8] mt-0.5">When status changed</p>
+                    Last status change
                   </th>
                   {canOrder && (
                     <th className="px-4 py-3 font-medium">
-                      Actions
-                      <p className="text-[10px] font-normal text-[#94a3b8] mt-0.5">Place / hold / drop</p>
+                      Order Action
                     </th>
                   )}
                   <th className="px-4 py-3 text-right font-medium whitespace-nowrap">
                     Deadline
-                    <p className="text-[10px] font-normal text-[#94a3b8] mt-0.5">Target date</p>
                   </th>
                 </tr>
               </thead>
