@@ -18,6 +18,7 @@ REFRESH_TOKEN_TTL_DAYS = 30
 MAX_SESSIONS_PER_USER = 5
 MAX_FAILED_ATTEMPTS = 5
 LOCKOUT_WINDOW_MINUTES = 15
+RESET_TOKEN_TTL_MINUTES = 30
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 bearer_scheme = HTTPBearer()
@@ -111,6 +112,33 @@ def decode_token(token: str) -> dict | None:
         return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
     except JWTError:
         return None
+
+
+def _password_fingerprint(password_hash: str) -> str:
+    """Short fingerprint of the current password hash — embedding this in a reset
+    token makes it self-invalidating: once the password changes, old tokens
+    naturally stop matching, with no extra DB table needed for single-use tracking."""
+    return password_hash[-16:]
+
+
+def create_password_reset_token(user: User) -> str:
+    payload = {
+        "user_id": user.id,
+        "type": "reset",
+        "pwd_fp": _password_fingerprint(user.password),
+        "exp": datetime.utcnow() + timedelta(minutes=RESET_TOKEN_TTL_MINUTES),
+    }
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def verify_password_reset_token(token: str, db: Session) -> User | None:
+    decoded = decode_token(token)
+    if not decoded or decoded.get("type") != "reset":
+        return None
+    user = db.query(User).filter(User.id == decoded.get("user_id")).first()
+    if not user or _password_fingerprint(user.password) != decoded.get("pwd_fp"):
+        return None
+    return user
 
 
 def verify_refresh_token(token: str, db: Session) -> int | None:

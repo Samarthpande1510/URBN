@@ -91,6 +91,28 @@ export async function logout(): Promise<void> {
   clearAuth();
 }
 
+export async function forgotPassword(email: string): Promise<string> {
+  const res = await fetch(`${API}/auth/forgot-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(extractDetail(data.detail, "Something went wrong."));
+  return data.message as string;
+}
+
+export async function resetPassword(token: string, newPassword: string): Promise<string> {
+  const res = await fetch(`${API}/auth/reset-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token, new_password: newPassword }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(extractDetail(data.detail, "Reset failed."));
+  return data.message as string;
+}
+
 export function validatePassword(password: string): string | null {
   if (password.length < 8) return "Password must be at least 8 characters.";
   if (!/[A-Za-z]/.test(password)) return "Password must include at least one letter.";

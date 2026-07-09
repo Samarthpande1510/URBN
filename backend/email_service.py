@@ -226,3 +226,43 @@ def send_product_approved_email(
         cta_color="#16a34a",
     )
     _send(f"Product Approved — {product_name}", html)
+
+
+def send_password_reset_email(to_email: str, user_name: str, reset_link: str):
+    html = f"""<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;padding:40px 20px;">
+    <tr><td align="center">
+      <table width="500" cellpadding="0" cellspacing="0" style="max-width:500px;width:100%;">
+        <tr><td style="background:#0f172a;border-radius:12px 12px 0 0;padding:28px 32px;">
+          <p style="margin:0;font-size:11px;font-weight:600;letter-spacing:0.1em;color:#94a3b8;text-transform:uppercase;">URBN Internal Pipeline</p>
+          <h1 style="margin:6px 0 0;font-size:22px;font-weight:600;color:#ffffff;">Reset your password</h1>
+        </td></tr>
+        <tr><td style="background:#ffffff;padding:32px;border-left:1px solid #e2e8f0;border-right:1px solid #e2e8f0;">
+          <p style="margin:0 0 20px;font-size:15px;color:#334155;line-height:1.6;">Hi {user_name},</p>
+          <p style="margin:0 0 24px;font-size:15px;color:#334155;line-height:1.6;">
+            We received a request to reset your URBN account password. Click the button below to choose a new one —
+            this link expires in 30 minutes and can only be used once.
+          </p>
+          <div style="text-align:center;margin-bottom:24px;">
+            <a href="{reset_link}" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;
+              padding:12px 28px;border-radius:8px;font-size:14px;font-weight:600;">Reset Password</a>
+          </div>
+          <p style="margin:0 0 24px;font-size:13px;color:#94a3b8;line-height:1.6;">
+            If you didn't request this, you can safely ignore this email — your password will not change.
+          </p>
+          <p style="margin:0;font-size:13px;color:#94a3b8;line-height:1.6;">
+            This is an automated notification from the URBN internal pipeline system. Do not reply to this email.
+          </p>
+        </td></tr>
+        <tr><td style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:0 0 12px 12px;padding:16px 32px;text-align:center;">
+          <p style="margin:0;font-size:12px;color:#94a3b8;">URBN Internal · Product Pipeline Tracker</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>"""
+    _send("Reset your URBN password", html, recipients=[to_email])

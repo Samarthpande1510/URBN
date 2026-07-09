@@ -1,3 +1,4 @@
+import os
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
@@ -9,9 +10,13 @@ from auth import (
     verify_refresh_token, revoke_refresh_token,
     check_login_rate_limit, record_login_attempt,
     get_current_user,
+    create_password_reset_token, verify_password_reset_token,
 )
+from email_service import send_password_reset_email
 
 router = APIRouter()
+
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
 VALID_ROLES = {"QA", "CEO", "Dev", "Sales", "STAFF"}
 
@@ -137,3 +142,39 @@ def logout(data: RefreshReq, db: Session = Depends(get_db)):
 @router.get("/me")
 def me(current_user: User = Depends(get_current_user)):
     return {"id": current_user.id, "name": current_user.name, "email": current_user.email, "role": current_user.role}
+
+
+class ForgotPasswordReq(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordReq(BaseModel):
+    token: str
+    new_password: str
+
+
+@router.post("/forgot-password")
+def forgot_password(data: ForgotPasswordReq, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == data.email).first()
+    # Always return the same generic response whether or not the account
+    # exists, so this endpoint can't be used to discover registered emails.
+    if user:
+        token = create_password_reset_token(user)
+        reset_link = f"{FRONTEND_URL}/reset-password?token={token}"
+        try:
+            send_password_reset_email(user.email, user.name, reset_link)
+        except Exception as e:
+            print(f"[email] Password reset email error: {e}")
+    return {"message": "If an account exists for that email, a reset link has been sent."}
+
+
+@router.post("/reset-password")
+def reset_password(data: ResetPasswordReq, db: Session = Depends(get_db)):
+    user = verify_password_reset_token(data.token, db)
+    if not user:
+        raise HTTPException(status_code=400, detail="This reset link is invalid or has expired.")
+    if len(data.new_password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters.")
+    user.password = hash_password(data.new_password)
+    db.commit()
+    return {"message": "Password reset successfully. You can now log in."}
