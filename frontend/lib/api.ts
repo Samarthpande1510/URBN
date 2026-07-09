@@ -105,6 +105,10 @@ export const api = {
       apiFetch(`/products/${id}/archive`, "POST", { remarks: remarks || undefined }, v),
     restoreArchived: (id: number, v?: number) =>
       apiFetch(`/products/${id}/restore-archived`, "POST", undefined, v),
+    hide: (id: number, v?: number) =>
+      apiFetch(`/products/${id}/hide`, "POST", undefined, v),
+    unhide: (id: number, v?: number) =>
+      apiFetch(`/products/${id}/unhide`, "POST", undefined, v),
     moveToHold: (id: number, remarks?: string, v?: number) =>
       apiFetch(`/products/${id}/move-to-hold`, "POST", { remarks: remarks || undefined }, v),
     rejectFromHold: (id: number, remarks?: string, v?: number) =>
@@ -150,8 +154,8 @@ export const api = {
       apiFetch(`/golden/${productId}/compliance/dispatch`, "POST", { name, expected_delivery_date }, v),
     updateComplianceExpectedDate: (productId: number, name: string, expected_delivery_date: string, v?: number) =>
       apiFetch(`/golden/${productId}/compliance/expected-date`, "PUT", { name, expected_delivery_date }, v),
-    markCertReceived: (productId: number, name: string, v?: number) =>
-      apiFetch(`/golden/${productId}/compliance/cert-received`, "POST", { name }, v),
+    markCertReceived: (productId: number, name: string, v?: number, received_date?: string) =>
+      apiFetch(`/golden/${productId}/compliance/cert-received`, "POST", { name, received_date }, v),
     confirmCompliance: (productId: number, name: string, v?: number) =>
       apiFetch(`/golden/${productId}/compliance/confirm`, "POST", { name }, v),
     undoComplianceStep: (productId: number, name: string, v?: number) =>
@@ -162,8 +166,8 @@ export const api = {
       apiFetch(`/golden/${productId}/packaging/dispatch`, "POST", { expected_delivery_date }, v),
     updatePackagingExpectedDate: (productId: number, expected_delivery_date: string, v?: number) =>
       apiFetch(`/golden/${productId}/packaging/expected-date`, "PUT", { expected_delivery_date }, v),
-    setPackagingStatus: (productId: number, sample_status: string, v?: number) =>
-      apiFetch(`/golden/${productId}/packaging/status`, "POST", { sample_status }, v),
+    setPackagingStatus: (productId: number, sample_status: string, v?: number, received_date?: string) =>
+      apiFetch(`/golden/${productId}/packaging/status`, "POST", { sample_status, received_date }, v),
     decidePackaging: (productId: number, decision: string, improvement_notes?: string, v?: number) =>
       apiFetch(`/golden/${productId}/packaging/decide`, "POST", { decision, improvement_notes }, v),
     kldAcknowledge: (productId: number, v?: number) =>

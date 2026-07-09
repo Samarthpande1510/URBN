@@ -654,6 +654,9 @@ function PackagingCard({ product }: { product: ProductRow }) {
   const [editingVendor, setEditingVendor] = useState(false);
   const [expectedDate, setExpectedDate] = useState(pk?.expectedDeliveryDate ?? "");
   const [improvNotes, setImprovNotes] = useState("");
+  const [receivedDatePick, setReceivedDatePick] = useState(() => new Date().toISOString().split("T")[0]);
+  const [editingReceivedDate, setEditingReceivedDate] = useState(false);
+  const [receivedDateDraft, setReceivedDateDraft] = useState(pk?.sampleReceivedAt?.split("T")[0] ?? "");
 
   useEffect(() => {
     refreshGolden(product.id);
@@ -697,12 +700,22 @@ function PackagingCard({ product }: { product: ProductRow }) {
     } catch (e: unknown) { showToast(`Error: ${e instanceof Error ? e.message : "Failed"}`); }
   }
 
-  async function setSampleStatus(status: "Awaiting" | "Received") {
+  async function setSampleStatus(status: "Awaiting" | "Received", receivedDate?: string) {
     if (!pk) return;
     try {
-      await api.golden.setPackagingStatus(product.id, status, product.version);
+      await api.golden.setPackagingStatus(product.id, status, product.version, receivedDate);
       await onRefresh();
       showToast(`Status updated: ${status}`);
+    } catch (e: unknown) { showToast(`Error: ${e instanceof Error ? e.message : "Failed"}`); }
+  }
+
+  async function saveReceivedDate() {
+    if (!pk || !receivedDateDraft) return;
+    try {
+      await api.golden.setPackagingStatus(product.id, "Received", product.version, receivedDateDraft);
+      await onRefresh();
+      setEditingReceivedDate(false);
+      showToast("Received date updated");
     } catch (e: unknown) { showToast(`Error: ${e instanceof Error ? e.message : "Failed"}`); }
   }
 
@@ -894,20 +907,57 @@ function PackagingCard({ product }: { product: ProductRow }) {
             <>
               {/* Status selector — only before decision */}
               {!pk.decision && (
-                <div className="flex gap-2">
-                  {(["Awaiting dummy package", "Received"] as const).map((s) => {
-                    const active = pk.sampleStatus === s || (s === "Awaiting dummy package" && pk.sampleStatus === "Awaiting");
-                    return (
-                      <button key={s}
-                        onClick={() => setSampleStatus(s === "Awaiting dummy package" ? "Awaiting" : "Received")}
-                        className={`flex-1 rounded-md border py-2.5 text-xs font-semibold transition ${active
-                          ? s === "Received" ? "border-green-500 bg-green-500/15 text-green-600" : "border-amber-400 bg-amber-400/15 text-amber-600"
-                          : "border-[#bfdbfe]/50 bg-[#eff6ff] text-[#64748b] hover:bg-[#dbeafe]"}`}>
-                        {s}
-                      </button>
-                    );
-                  })}
-                </div>
+                <>
+                  <div className="flex gap-2">
+                    {(["Awaiting dummy package", "Received"] as const).map((s) => {
+                      const active = pk.sampleStatus === s || (s === "Awaiting dummy package" && pk.sampleStatus === "Awaiting");
+                      return (
+                        <button key={s}
+                          onClick={() => s === "Awaiting dummy package" ? setSampleStatus("Awaiting") : setSampleStatus("Received", receivedDatePick)}
+                          className={`flex-1 rounded-md border py-2.5 text-xs font-semibold transition ${active
+                            ? s === "Received" ? "border-green-500 bg-green-500/15 text-green-600" : "border-amber-400 bg-amber-400/15 text-amber-600"
+                            : "border-[#bfdbfe]/50 bg-[#eff6ff] text-[#64748b] hover:bg-[#dbeafe]"}`}>
+                          {s}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {pk.sampleStatus !== "Received" && (
+                    <div>
+                      <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-[#64748b]">Date received (if marking Received)</label>
+                      <input type="date" value={receivedDatePick} onChange={(e) => setReceivedDatePick(e.target.value)}
+                        max={new Date().toISOString().split("T")[0]}
+                        className="w-full rounded-md border border-[#bfdbfe]/50 bg-white px-3 py-2 text-sm text-[#0f172a] outline-none focus:border-green-500" />
+                    </div>
+                  )}
+                  {pk.sampleStatus === "Received" && (
+                    <div className="flex items-center justify-between gap-2 rounded-md border border-green-500/30 bg-green-500/5 px-3 py-2">
+                      {editingReceivedDate ? (
+                        <div className="flex flex-1 gap-2">
+                          <input type="date" value={receivedDateDraft} onChange={(e) => setReceivedDateDraft(e.target.value)}
+                            max={new Date().toISOString().split("T")[0]}
+                            className="flex-1 rounded-md border border-green-500/30 bg-white px-2.5 py-1.5 text-sm text-[#0f172a] outline-none focus:border-green-500" />
+                          <button onClick={saveReceivedDate} disabled={!receivedDateDraft}
+                            className="rounded-md bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-40">
+                            Save
+                          </button>
+                          <button onClick={() => setEditingReceivedDate(false)}
+                            className="rounded-md border border-green-500/30 px-3 py-1.5 text-xs font-medium text-green-700 hover:bg-green-500/10">
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <p className="text-xs font-medium text-green-600">Received {pk.sampleReceivedAt ? fmt(pk.sampleReceivedAt) : ""}</p>
+                          <button onClick={() => { setReceivedDateDraft(pk.sampleReceivedAt?.split("T")[0] ?? ""); setEditingReceivedDate(true); }}
+                            className="rounded-md border border-green-500/30 px-2.5 py-1 text-[11px] font-medium text-green-700 hover:bg-green-500/10">
+                            Edit date
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </>
               )}
 
               {/* Received → Accept / Reject */}
@@ -1092,6 +1142,11 @@ function ComplianceCard({ product }: { product: ProductRow }) {
   const [expectedDrafts, setExpectedDrafts] = useState<Record<string, string>>(
     Object.fromEntries(ALL_CERTS.map((c) => [c, gw.compliance?.tracks.find((t) => t.name === c)?.expectedDeliveryDate ?? ""]))
   );
+  const today = new Date().toISOString().split("T")[0];
+  const [receivedDrafts, setReceivedDrafts] = useState<Record<string, string>>(
+    Object.fromEntries(ALL_CERTS.map((c) => [c, gw.compliance?.tracks.find((t) => t.name === c)?.certReceivedAt?.split("T")[0] ?? today]))
+  );
+  const [editingReceived, setEditingReceived] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     refreshGolden(product.id);
@@ -1132,10 +1187,20 @@ function ComplianceCard({ product }: { product: ProductRow }) {
 
   async function markCertReceived(cert: ComplianceCertName) {
     try {
-      await api.golden.markCertReceived(product.id, cert);
+      await api.golden.markCertReceived(product.id, cert, product.version, receivedDrafts[cert] || undefined);
       await onRefresh();
       addNotification({ targetRoles: NOTIFY_ALL, productId: product.id, productName: product.codeName, message: `${cert} certification received` });
       showToast(`${cert} certification received`);
+    } catch (e: unknown) { showToast(`Error: ${e instanceof Error ? e.message : "Failed"}`); }
+  }
+
+  async function saveCertReceivedDate(cert: ComplianceCertName) {
+    if (!receivedDrafts[cert]) return;
+    try {
+      await api.golden.markCertReceived(product.id, cert, product.version, receivedDrafts[cert]);
+      await onRefresh();
+      setEditingReceived((d) => ({ ...d, [cert]: false }));
+      showToast(`${cert} received date updated`);
     } catch (e: unknown) { showToast(`Error: ${e instanceof Error ? e.message : "Failed"}`); }
   }
 
@@ -1332,20 +1397,45 @@ function ComplianceCard({ product }: { product: ProductRow }) {
 
                 {/* Certification received */}
                 {tr && !confirmed && tr.sampleDispatchedAt && (
-                  <div className={`flex items-center gap-2 rounded-md border px-3 py-2 ${tr.certReceivedAt ? "border-green-500/30 bg-green-500/5" : "border-[#bfdbfe]/30 bg-[#f8faff]"}`}>
-                    {tr.certReceivedAt
-                      ? <CheckCircle size={13} className="text-green-400 shrink-0" />
-                      : <Circle size={13} className="text-[#cbd5e1] shrink-0" />}
-                    <div className="flex-1 min-w-0">
-                      <p className={`text-xs font-medium ${tr.certReceivedAt ? "text-green-600" : "text-[#94a3b8]"}`}>Certification received</p>
-                      {tr.certReceivedAt && <p className="text-[10px] text-[#64748b] mt-0.5">{fmt(tr.certReceivedAt)}</p>}
+                  <div className={`rounded-md border px-3 py-2 ${tr.certReceivedAt ? "border-green-500/30 bg-green-500/5" : "border-[#bfdbfe]/30 bg-[#f8faff]"}`}>
+                    <div className="flex items-center gap-2">
+                      {tr.certReceivedAt
+                        ? <CheckCircle size={13} className="text-green-400 shrink-0" />
+                        : <Circle size={13} className="text-[#cbd5e1] shrink-0" />}
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-xs font-medium ${tr.certReceivedAt ? "text-green-600" : "text-[#94a3b8]"}`}>Certification received</p>
+                        {tr.certReceivedAt && !editingReceived[cert] && <p className="text-[10px] text-[#64748b] mt-0.5">{fmt(tr.certReceivedAt)}</p>}
+                      </div>
+                      {!tr.certReceivedAt && !editingReceived[cert] && (
+                        <button onClick={() => setEditingReceived((d) => ({ ...d, [cert]: true }))}
+                          className="rounded-md border px-3 py-1.5 text-[11px] font-semibold hover:opacity-80 whitespace-nowrap"
+                          style={{ borderColor: color + "50", color, background: color + "12" }}>
+                          Mark Received
+                        </button>
+                      )}
+                      {tr.certReceivedAt && !editingReceived[cert] && (
+                        <button onClick={() => setEditingReceived((d) => ({ ...d, [cert]: true }))}
+                          className="shrink-0 rounded-md border border-green-500/30 px-2.5 py-1 text-[11px] font-medium text-green-700 hover:bg-green-500/10">
+                          Edit date
+                        </button>
+                      )}
                     </div>
-                    {!tr.certReceivedAt && (
-                      <button onClick={() => markCertReceived(cert)}
-                        className="rounded-md border px-3 py-1.5 text-[11px] font-semibold hover:opacity-80 whitespace-nowrap"
-                        style={{ borderColor: color + "50", color, background: color + "12" }}>
-                        Mark Received
-                      </button>
+                    {editingReceived[cert] && (
+                      <div className="mt-2 flex gap-2">
+                        <input type="date" value={receivedDrafts[cert] ?? today}
+                          onChange={(e) => setReceivedDrafts((d) => ({ ...d, [cert]: e.target.value }))}
+                          max={today}
+                          className="flex-1 rounded-md border border-[#bfdbfe]/50 bg-white px-2.5 py-1.5 text-sm text-[#0f172a] outline-none focus:border-[#93c5fd]" />
+                        <button onClick={() => tr.certReceivedAt ? saveCertReceivedDate(cert) : markCertReceived(cert)}
+                          className="rounded-md px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90"
+                          style={{ background: color }}>
+                          Save
+                        </button>
+                        <button onClick={() => setEditingReceived((d) => ({ ...d, [cert]: false }))}
+                          className="rounded-md border border-[#bfdbfe]/50 px-3 py-1.5 text-xs font-medium text-[#64748b] hover:bg-[#eff6ff]">
+                          Cancel
+                        </button>
+                      </div>
                     )}
                   </div>
                 )}

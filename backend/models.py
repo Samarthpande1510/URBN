@@ -59,6 +59,7 @@ class Product(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     version = Column(Integer, default=1, nullable=False)
     sample_version = Column(Integer, default=1)
+    hidden = Column(Boolean, default=False)        # manually hidden from dashboard (terminal products only)
 
 
 class ActivityLog(Base):

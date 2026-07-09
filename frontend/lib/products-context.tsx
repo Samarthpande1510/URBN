@@ -191,6 +191,7 @@ export interface ProductRow {
   verdictRemarks?: string;
   rejectedBy?: string;
   archiveRemarks?: string;
+  hidden?: boolean;
   rejectionComments?: RejectionComment[];
   npdReport?: NpdReport;
   npdReports?: Array<{ version: number } & NpdReport>;
@@ -251,6 +252,7 @@ export function mapProductFromApi(raw: Record<string, unknown>): ProductRow {
     verdictRemarks: raw.verdict_remarks as string | undefined,
     rejectedBy: raw.rejected_by as string | undefined,
     archiveRemarks: raw.archive_remarks as string | undefined,
+    hidden: (raw.hidden as boolean) ?? false,
     factoryComm: fc ? {
       decidedAction: fc.decided_action as FactoryAction,
       decidedAt: fc.decided_at as string | null,

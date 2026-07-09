@@ -263,6 +263,7 @@ def _serialize_product(p, db):
         "created_by": p.created_by,
         "created_at": p.created_at.isoformat() if p.created_at else None,
         "sample_version": p.sample_version or 1,
+        "hidden": bool(p.hidden),
         "npd_report": {
             "outcome": npd.outcome,
             "notes": npd.notes,
@@ -514,6 +515,53 @@ def archive_product(
     push_notification(db, product_id, p.code_name, "Product archived.", ["CEO", "Dev"])
     db.commit()
     return {"message": "Archived"}
+
+
+# ── Hide / unhide (dashboard decluttering, terminal products only) ─────────
+
+def _hide_eligible(p, db: Session) -> bool:
+    """Only terminal products can be hidden: order placed, order dropped,
+    or rejected/archived (rejection confirmed)."""
+    if p.status in ("Rejected", "Archived"):
+        return True
+    od = db.query(OrderDecision).filter(OrderDecision.product_id == p.id).first()
+    return bool(od and od.state in ("placed", "dropped"))
+
+
+@router.post("/{product_id}/hide")
+def hide_product(
+    product_id: int,
+    v: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("CEO", "Dev")),
+):
+    p = db.query(Product).filter(Product.id == product_id).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Product not found")
+    if not _hide_eligible(p, db):
+        raise HTTPException(status_code=400, detail="Only completed products (order placed, dropped, or rejection confirmed) can be hidden.")
+    check_and_bump(p, v)
+    p.hidden = True
+    log(db, product_id, "Hidden from dashboard", current_user)
+    db.commit()
+    return {"message": "Hidden"}
+
+
+@router.post("/{product_id}/unhide")
+def unhide_product(
+    product_id: int,
+    v: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("CEO", "Dev")),
+):
+    p = db.query(Product).filter(Product.id == product_id).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Product not found")
+    check_and_bump(p, v)
+    p.hidden = False
+    log(db, product_id, "Restored to dashboard from hidden", current_user)
+    db.commit()
+    return {"message": "Restored"}
 
 
 class RejectFromHoldReq(BaseModel):

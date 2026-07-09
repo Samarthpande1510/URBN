@@ -296,18 +296,41 @@ export default function DashboardPage() {
     }
   }
 
+  // Terminal products only: order placed, order dropped, or rejected (confirmation stage)
+  function canHide(p: ProductRow): boolean {
+    return p.status === "Rejected" || p.orderDecision?.state === "placed" || p.orderDecision?.state === "dropped";
+  }
+
+  async function hideProduct(p: ProductRow) {
+    try {
+      await api.products.hide(p.id, p.version);
+      await refreshProducts();
+      showToast(`${p.codeName} moved to Hidden`);
+    } catch (err: unknown) {
+      const { message, isConflict } = apiErrorMessage(err);
+      if (isConflict) await refreshProducts();
+      showToast(isConflict ? message : `Error: ${message}`);
+    }
+  }
+
   const q = search.toLowerCase();
   const activeProducts = products.filter((p) => {
+    if (p.hidden) return false;
     if (p.status === "Rejected" || p.status === "Archived" || p.status === "Removed") return false;
     if (q) return p.codeName.toLowerCase().includes(q) || (p.factory ?? "").toLowerCase().includes(q) || p.skuCode.toLowerCase().includes(q);
     return true;
   });
   const rejectedProducts = products.filter((p) => {
+    if (p.hidden) return false;
     if (p.status !== "Rejected") return false;
     if (q) return p.codeName.toLowerCase().includes(q) || (p.factory ?? "").toLowerCase().includes(q) || p.skuCode.toLowerCase().includes(q);
     return true;
   });
   const rejectedCount = products.filter((p) => p.status === "Rejected").length;
+  // Matches the exact filter used on /decision-pending — excludes improvement-sample cases.
+  const pendingCeoConfirmationCount = products.filter(
+    (p) => p.status === "Pending Decision" && !p.factoryComm?.improvementSampleExpected
+  ).length;
   const archivedProducts = products.filter((p) => p.status === "Archived");
 
   const allTabProducts = [
@@ -518,12 +541,23 @@ export default function DashboardPage() {
                     {p.deadline ? new Date(p.deadline).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : <span className="text-[#94a3b8]">—</span>}
                   </td>
                   <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
-                    <button
-                      onClick={() => openEdit(p)}
-                      className="rounded border border-[#bfdbfe]/50 px-2.5 py-1 text-xs text-[#64748b] hover:bg-[#eff6ff] hover:text-[#1d4ed8] transition whitespace-nowrap"
-                    >
-                      ✎ Edit
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => openEdit(p)}
+                        className="rounded border border-[#bfdbfe]/50 px-2.5 py-1 text-xs text-[#64748b] hover:bg-[#eff6ff] hover:text-[#1d4ed8] transition whitespace-nowrap"
+                      >
+                        ✎ Edit
+                      </button>
+                      {canHide(p) && (
+                        <button
+                          onClick={() => hideProduct(p)}
+                          title="Move to the Hidden tab — data is kept, just decluttered from the dashboard"
+                          className="rounded border border-[#bfdbfe]/50 px-2.5 py-1 text-xs text-[#94a3b8] hover:bg-[#eff6ff] hover:text-[#64748b] transition whitespace-nowrap"
+                        >
+                          Hide
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))
@@ -533,12 +567,12 @@ export default function DashboardPage() {
         </div>
       </GridBeam>
 
-      {(rejectedCount > 0 || archivedProducts.length > 0) && (
+      {(pendingCeoConfirmationCount > 0 || archivedProducts.length > 0) && (
         <div className="mt-8 flex flex-wrap gap-3">
-          {rejectedCount > 0 && (
+          {pendingCeoConfirmationCount > 0 && (
             <a href="/decision-pending" className="flex-1 min-w-[180px] rounded-md border border-red-500/20 bg-[#ffffff]/60 px-5 py-4 flex items-center justify-between gap-4 hover:bg-[#eff6ff] transition">
               <p className="text-sm text-[#64748b]">
-                <span className="font-semibold text-red-400">{rejectedCount}</span> {rejectedCount === 1 ? "product" : "products"} pending CEO confirmation.
+                <span className="font-semibold text-red-400">{pendingCeoConfirmationCount}</span> {pendingCeoConfirmationCount === 1 ? "product" : "products"} pending CEO confirmation.
               </p>
               <span className="shrink-0 text-xs text-[#1d4ed8]">View →</span>
             </a>

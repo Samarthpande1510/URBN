@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { LayoutDashboard, FlaskConical, ClipboardList, FileCheck2, PauseCircle, Award, Bell, Archive, PackageX, LogOut, X } from "lucide-react";
+import { LayoutDashboard, FlaskConical, ClipboardList, FileCheck2, PauseCircle, Award, Bell, Archive, PackageX, EyeOff, LogOut, X } from "lucide-react";
 import { logout, getSession } from "@/lib/auth";
 import type { Role, Session } from "@/lib/auth";
 import { useProducts } from "@/lib/products-context";
@@ -74,6 +74,16 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
 
       <div className="space-y-0.5">
         <div className="h-px bg-white/10 mb-2" />
+        <Link
+          href="/hidden"
+          onClick={onClose}
+          className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition ${
+            pathname === "/hidden" ? "bg-white/15 text-white font-medium" : "text-blue-100/80 hover:bg-white/10 hover:text-white"
+          }`}
+        >
+          <EyeOff size={17} />
+          Hidden
+        </Link>
         <Link
           href="/archived"
           onClick={onClose}

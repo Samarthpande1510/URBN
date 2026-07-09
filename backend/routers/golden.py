@@ -71,6 +71,11 @@ class CertNameReq(BaseModel):
     name: str
 
 
+class CertReceivedReq(BaseModel):
+    name: str
+    received_date: Optional[str] = None  # optional backdate
+
+
 class CertDispatchReq(BaseModel):
     name: str
     expected_delivery_date: Optional[str] = None
@@ -95,6 +100,7 @@ class PackagingExpectedDateReq(BaseModel):
 
 class PackagingStatusReq(BaseModel):
     sample_status: str  # Awaiting | Received
+    received_date: Optional[str] = None  # optional backdate for when status is Received
 
 
 class PackagingDecideReq(BaseModel):
@@ -310,14 +316,14 @@ def update_compliance_expected_date(
 @router.post("/{product_id}/compliance/cert-received")
 def mark_cert_received(
     product_id: int,
-    data: CertNameReq,
+    data: CertReceivedReq,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role("CEO", "Dev", "Purchase")),
 ):
     wf = get_workflow_or_404(product_id, db)
     p = db.query(Product).filter(Product.id == product_id).first()
     tr = get_cert_or_404(wf.id, data.name, db)
-    tr.cert_received_at = datetime.utcnow()
+    tr.cert_received_at = datetime.fromisoformat(data.received_date) if data.received_date else datetime.utcnow()
     log(db, product_id, f"Certification received — {data.name}", current_user)
     push_notification(db, product_id, p.code_name, f"Certification received — {data.name}.", NOTIFY_ALL)
     db.commit()
@@ -448,7 +454,10 @@ def set_packaging_status(
         raise HTTPException(status_code=400, detail="No packaging track")
     pk.sample_status = data.sample_status
     if data.sample_status == "Received":
-        pk.sample_received_at = datetime.utcnow()
+        if data.received_date:
+            pk.sample_received_at = datetime.fromisoformat(data.received_date)
+        else:
+            pk.sample_received_at = datetime.utcnow()
     db.commit()
     return {"message": f"Status set: {data.sample_status}"}
 
