@@ -407,7 +407,7 @@ def submit_npd_report(
         p.status_changed_at = now
         outcome_label = "Pass" if data.outcome == "Pass" else "Not Pass"
         log(db, product_id, f"NPD report submitted — {outcome_label}", current_user, data.notes)
-        push_notification(db, product_id, p.code_name, f"NPD result: {outcome_label} — awaiting Yash's decision.", ["CEO", "Dev"])
+        push_notification(db, product_id, p.code_name, f"NPD result: {outcome_label} — awaiting CEO decision.", ["CEO", "Dev"])
 
     db.commit()
     return {"message": "Report submitted", "status": p.status}
@@ -429,8 +429,6 @@ def ceo_decision(
     check_and_bump(p, v)
     if p.status != "Pending Decision":
         raise HTTPException(status_code=400, detail="Product is not pending a decision")
-    if data.decision == "On hold" and current_user.role != "CEO":
-        raise HTTPException(status_code=403, detail="Only the CEO can put a product on hold.")
 
     now = datetime.utcnow()
     p.status = data.decision
@@ -447,15 +445,15 @@ def ceo_decision(
             decided_by_id=current_user.id,
             decided_by_name=current_user.name,
         ))
-        log(db, product_id, f"Yash's decision: Approved", current_user)
+        log(db, product_id, f"CEO decision: Approved", current_user)
     elif data.decision == "On hold":
         db.add(FactoryComm(product_id=product_id, decided_action=None))
-        log(db, product_id, "Yash's decision: On hold", current_user)
+        log(db, product_id, "CEO decision: On hold", current_user)
     elif data.decision == "Rejected":
         p.rejected_by = current_user.name
         p.status_changed_at = now
-        log(db, product_id, "Yash's decision: Rejected", current_user)
-        push_notification(db, product_id, p.code_name, "Product rejected by Yash.", NOTIFY_ALL)
+        log(db, product_id, "CEO decision: Rejected", current_user)
+        push_notification(db, product_id, p.code_name, "Product rejected by CEO.", NOTIFY_ALL)
     else:
         raise HTTPException(status_code=400, detail="Invalid decision")
 

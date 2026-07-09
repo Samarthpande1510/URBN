@@ -167,7 +167,7 @@ function getPipelineStage(p: ProductRow): string {
     case "Rejected":
       return p.rejectedBy
         ? `Rejection confirmed by ${p.rejectedBy} — pending archive`
-        : "Rejected — awaiting Yash's decision";
+        : "Rejected — awaiting CEO decision";
     case "Archived":
       return "Product dropped — archived";
     case "On hold": {

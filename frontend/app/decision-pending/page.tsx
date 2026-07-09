@@ -500,9 +500,7 @@ export default function DecisionPendingPage() {
                             <div className="flex gap-1.5 flex-wrap">
                               {([
                                 { type: "approve" as VerdictType, label: "✓ Approve", cls: "border-green-500/30 bg-green-500/5 text-green-500 hover:bg-green-500/15" },
-                                ...(session?.role === "CEO"
-                                  ? [{ type: "hold" as VerdictType, label: "⏸ Hold", cls: "border-[#bfdbfe]/50 bg-[#eff6ff] text-[#1d4ed8] hover:bg-[#dbeafe]" }]
-                                  : []),
+                                { type: "hold"    as VerdictType, label: "⏸ Hold",    cls: "border-[#bfdbfe]/50 bg-[#eff6ff] text-[#1d4ed8] hover:bg-[#dbeafe]" },
                                 { type: "reject"  as VerdictType, label: "✕ Reject",  cls: "border-red-500/30 bg-red-500/5 text-red-400 hover:bg-red-500/15" },
                               ]).map(({ type, label, cls }) => (
                                 <button key={type} onClick={() => openVerdict(p.id, type)}
