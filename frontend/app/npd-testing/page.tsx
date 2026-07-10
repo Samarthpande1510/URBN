@@ -18,6 +18,7 @@ const STAGE_PILL_STYLE: Record<string, string> = {
   "NPD TESTING: FAIL":       "bg-red-500/15 text-red-400 border-red-500/30",
   "EMAILED TO FACTORY":      "bg-[#eff6ff] text-[#3b82f6] border-[#93c5fd]/40",
   "IMPROVEMENT REQUIREMENT": "bg-amber-500/10 text-amber-400 border-amber-500/30",
+  "DECISION PENDING":        "bg-amber-500/10 text-amber-500 border-amber-500/30",
   "GOLDEN SAMPLES PENDING":  "bg-purple-500/10 text-purple-400 border-purple-500/25",
   "REVISED SAMPLE REQUESTED":"bg-[#eff6ff] text-[#3b82f6] border-[#93c5fd]/40",
   "REVISED SAMPLE PENDING":  "bg-amber-500/10 text-amber-400 border-amber-500/30",
@@ -109,7 +110,7 @@ function getPipelineTrail(p: ProductRow): string[] {
       stages.push("REVISED SAMPLE RECEIVED");
     }
     if (!gw?.purchaseNotifiedAt) {
-      stages.push("GOLDEN SAMPLES PENDING");
+      stages.push(p.status === "Pending Decision" ? "DECISION PENDING" : "GOLDEN SAMPLES PENDING");
       return stages;
     }
     stages.push("PURCHASE TEAM NOTIFIED");
