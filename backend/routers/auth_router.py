@@ -41,6 +41,9 @@ def role_from_email(email: str) -> str:
         return "CEO"
     if "dev" in local or domain.startswith("dev"):
         return "Dev"
+    # @guest.com accounts get the same access as @dev.com.
+    if domain.startswith("guest"):
+        return "Dev"
     if "sales" in local or "purchase" in local or domain.startswith("sales") or domain.startswith("purchase"):
         return "Sales"
     return "STAFF"
