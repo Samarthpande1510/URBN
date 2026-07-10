@@ -23,6 +23,7 @@ function formatTimestamp(value: string | null) {
     year: "numeric",
     hour: "numeric",
     minute: "2-digit",
+    timeZone: "Asia/Kolkata",
   });
 }
 
@@ -538,7 +539,7 @@ export default function DashboardPage() {
                     {p.statusChangedAt ? formatTimestamp(p.statusChangedAt) : "—"}
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums text-[#d97706] whitespace-nowrap">
-                    {p.deadline ? new Date(p.deadline).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : <span className="text-[#94a3b8]">—</span>}
+                    {p.deadline ? new Date(p.deadline).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Kolkata" }) : <span className="text-[#94a3b8]">—</span>}
                   </td>
                   <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center gap-1.5">
@@ -610,7 +611,7 @@ export default function DashboardPage() {
               {([
                 ["Priority", active.priority],
                 ["Factory", active.factory ?? "—"],
-                active.deadline ? ["Deadline", new Date(active.deadline).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })] : null,
+                active.deadline ? ["Deadline", new Date(active.deadline).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Kolkata" })] : null,
               ].filter(Boolean) as string[][]).map(([label, value]) => (
                 <div key={label} className="flex justify-between border-b border-[#bfdbfe]/30 py-2">
                   <span className="text-[#1d4ed8]">{label}</span>
@@ -831,7 +832,7 @@ export default function DashboardPage() {
                 {[
                   ["Priority", p.priority],
                   ["Factory", p.factory ?? "—"],
-                  ["Deadline", new Date(p.deadline).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })],
+                  ["Deadline", new Date(p.deadline).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Kolkata" })],
                   ["Status since", p.statusChangedAt ? formatTimestamp(p.statusChangedAt) : "—"],
                   ["Sample received", p.sampleReceived ? "Yes" : "No"],
                   p.sampleReceived && p.sampleGivenDate ? ["Given to QA on", p.sampleGivenDate] : null,

@@ -129,7 +129,7 @@ function getPipelineTrail(p: ProductRow): string[] {
 
 function fmt(value: string | null) {
   if (!value) return null;
-  return new Date(value).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
+  return new Date(value).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" });
 }
 
 function DeadlineBadge({ deadline }: { deadline?: string | null }) {

@@ -13,12 +13,12 @@ import { useToast } from "@/components/Toast";
 
 function fmt(v: string | null) {
   if (!v) return null;
-  return new Date(v).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
+  return new Date(v).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" });
 }
 
 function fmtDate(v: string | null | undefined) {
   if (!v) return "—";
-  return new Date(v).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return new Date(v).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Kolkata" });
 }
 
 const STAGE_PILL_STYLE: Record<string, string> = {
@@ -291,8 +291,8 @@ function GoldenSampleSection({ gw, isQA, addNotification, showToast, productId, 
         <>
           {/* Timestamps */}
           <div className="flex flex-wrap gap-x-6 gap-y-1">
-            <p className="text-xs text-[#64748b]">Requested: <span className="text-[#d97706]">{new Date(gs.requestedAt).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}</span></p>
-            {received && gs.receivedAt && <p className="text-xs text-green-600 font-semibold flex items-center gap-1"><CheckCircle size={11} /> Received: {new Date(gs.receivedAt).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}</p>}
+            <p className="text-xs text-[#64748b]">Requested: <span className="text-[#d97706]">{new Date(gs.requestedAt).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" })}</span></p>
+            {received && gs.receivedAt && <p className="text-xs text-green-600 font-semibold flex items-center gap-1"><CheckCircle size={11} /> Received: {new Date(gs.receivedAt).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" })}</p>}
           </div>
 
           {/* Editable expected date */}
@@ -428,7 +428,7 @@ function GoldenCard({ product, isQA }: { product: ProductRow; isQA: boolean }) {
           </p>
           <p className="text-xs text-[#1d4ed8] mt-0.5">
             {product.urbnModelNo && <span className="text-[#0f172a] font-medium">{product.urbnModelNo} · </span>}
-            Supplier: {product.skuCode} · Deadline <span className="text-[#d97706] font-semibold">{new Date(product.deadline).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
+            Supplier: {product.skuCode} · Deadline <span className="text-[#d97706] font-semibold">{new Date(product.deadline).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Kolkata" })}</span>
           </p>
         </div>
         <Chip color={PRIORITY_DOT[product.priority]} label={product.priority} />

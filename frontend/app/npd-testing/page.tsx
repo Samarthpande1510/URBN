@@ -136,7 +136,7 @@ function getPipelineTrail(p: ProductRow): string[] {
 
 function fmt(value: string | null) {
   if (!value) return null;
-  return new Date(value).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
+  return new Date(value).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" });
 }
 
 function getAddedDate(p: ProductRow): string | null {
@@ -230,7 +230,7 @@ function NpdReportsViewer({ reports, onClose }: { reports: VersionedReport[]; on
           <div className={`rounded-md border px-4 py-3 ${isPass ? "border-green-500/30 bg-green-500/10" : "border-red-500/30 bg-red-500/10"}`}>
             <p className="text-[10px] uppercase tracking-wide text-[#64748b] mb-0.5">v{activeV} NPD Outcome</p>
             <p className={`text-2xl font-bold ${isPass ? "text-green-400" : "text-red-400"}`}>{isPass ? "✓ Pass" : "✕ Fail"}</p>
-            <p className="text-[11px] text-[#94a3b8] mt-0.5">Submitted {new Date(report.submittedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</p>
+            <p className="text-[11px] text-[#94a3b8] mt-0.5">Submitted {new Date(report.submittedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Kolkata" })}</p>
           </div>
           {report.notes ? (
             <div>
@@ -259,7 +259,7 @@ function PrevReportsPanel({ p }: { p: ProductRow }) {
       <div className="flex items-center justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-purple-500">Improvement Sample v{v}</p>
-          {received && <p className="text-[11px] text-[#64748b] mt-0.5">Sample received: {new Date(received).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</p>}
+          {received && <p className="text-[11px] text-[#64748b] mt-0.5">Sample received: {new Date(received).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Kolkata" })}</p>}
         </div>
         {prev.length > 0 && (
           <button onClick={() => setOpen((s) => !s)} className="text-xs text-[#1d4ed8] hover:underline">
@@ -274,7 +274,7 @@ function PrevReportsPanel({ p }: { p: ProductRow }) {
             <div className="flex items-center gap-2 mb-1">
               <span className="text-[11px] font-semibold text-[#64748b]">v{r.version}</span>
               <span className={`text-[11px] font-bold ${pass ? "text-green-500" : "text-red-400"}`}>{pass ? "✓ Pass" : "✕ Fail"}</span>
-              <span className="text-[11px] text-[#94a3b8]">{new Date(r.submittedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
+              <span className="text-[11px] text-[#94a3b8]">{new Date(r.submittedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Kolkata" })}</span>
               {r.fileName && r.fileDataUrl && (
                 <a href={r.fileDataUrl} download={r.fileName} className="ml-auto text-xs text-[#1d4ed8] underline">Download</a>
               )}
@@ -438,7 +438,7 @@ export default function NpdTestingPage() {
                       </div>
                       <p className="text-xs text-[#64748b] mt-0.5">{p.factory ?? p.skuCode}</p>
                       {p.factoryComm?.improvementSampleExpected && p.factoryComm.improvementSampleReceivedAt && (
-                        <p className="text-[10px] text-purple-500 mt-0.5">Sample received: {new Date(p.factoryComm.improvementSampleReceivedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</p>
+                        <p className="text-[10px] text-purple-500 mt-0.5">Sample received: {new Date(p.factoryComm.improvementSampleReceivedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Kolkata" })}</p>
                       )}
                     </td>
                     <td className="px-4 py-3">
@@ -463,12 +463,12 @@ export default function NpdTestingPage() {
                     <td className="px-4 py-3 tabular-nums text-[#d97706] whitespace-nowrap text-center">
                       {showHistory ? (
                         <div className="flex flex-col gap-0.5 text-xs">
-                          <span> Sample received: {p.sampleGivenDate ? new Date(p.sampleGivenDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—"}</span>
+                          <span> Sample received: {p.sampleGivenDate ? new Date(p.sampleGivenDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Kolkata" }) : "—"}</span>
                           <span className="text-[#94a3b8]">Report submitted: {p.npdReport?.submittedAt ? fmt(p.npdReport.submittedAt) : "—"}</span>
                         </div>
                       ) : (
                         p.sampleGivenDate
-                          ? <span className="text-green-600 text-xs font-medium">✓ {new Date(p.sampleGivenDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
+                          ? <span className="text-green-600 text-xs font-medium">✓ {new Date(p.sampleGivenDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Kolkata" })}</span>
                           : <span className="text-[#94a3b8] text-xs">Not received</span>
                       )}
                     </td>

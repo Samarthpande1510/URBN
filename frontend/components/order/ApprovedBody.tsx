@@ -116,7 +116,7 @@ function getPipelineTrail(p: ProductRow): string[] {
 
 function fmt(v: string | null) {
   if (!v) return null;
-  return new Date(v).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
+  return new Date(v).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" });
 }
 
 function DeadlineBadge({ deadline }: { deadline?: string | null }) {
@@ -202,7 +202,7 @@ function PendingRow({ p, canOrder, onAction }: {
         <div className="flex items-center justify-end gap-2">
           <DeadlineBadge deadline={p.deadline} />
           <span className="tabular-nums text-[#d97706] text-xs">
-            {new Date(p.deadline).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+            {new Date(p.deadline).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Kolkata" })}
           </span>
         </div>
       </td>
@@ -284,7 +284,7 @@ function HeldRow({ p, canOrder, onDrop, onReinstate, onPlace }: {
         <div className="flex items-center justify-end gap-2">
           <DeadlineBadge deadline={p.deadline} />
           <span className="tabular-nums text-[#d97706] text-xs">
-            {new Date(p.deadline).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+            {new Date(p.deadline).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Kolkata" })}
           </span>
         </div>
       </td>

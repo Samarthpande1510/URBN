@@ -11,7 +11,7 @@ import { uploadFile } from "@/lib/upload";
 
 function fmt(value: string | null) {
   if (!value) return null;
-  return new Date(value).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
+  return new Date(value).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" });
 }
 
 function DeadlineBadge({ deadline }: { deadline?: string | null }) {
@@ -144,7 +144,7 @@ export function NpdForm({ p, onSubmit }: { p: ProductRow; onSubmit?: () => void 
         <div className="flex-1 min-w-0">
           <p className="text-lg font-semibold text-slate-900">{p.codeName}</p>
           <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-            <p className="text-xs text-[#1d4ed8]">{p.skuCode} · <span className="text-[#64748b]">{new Date(p.deadline).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span></p>
+            <p className="text-xs text-[#1d4ed8]">{p.skuCode} · <span className="text-[#64748b]">{new Date(p.deadline).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Kolkata" })}</span></p>
             <DeadlineBadge deadline={p.deadline} />
           </div>
           {p.factory && <p className="mt-0.5 text-xs text-[#94a3b8]">Factory: {p.factory}</p>}
@@ -160,7 +160,7 @@ export function NpdForm({ p, onSubmit }: { p: ProductRow; onSubmit?: () => void 
             <div className="flex items-center justify-between gap-2">
               <p className="flex items-center gap-2 text-sm font-semibold text-green-600">
                 <CheckCircle2 size={18} className="shrink-0" />
-                Sample received{p.sampleGivenDate ? ` — ${new Date(p.sampleGivenDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}` : ""}
+                Sample received{p.sampleGivenDate ? ` — ${new Date(p.sampleGivenDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Kolkata" })}` : ""}
               </p>
               {!editingReceivedDate && (
                 <button type="button" onClick={() => { setReceivedDateDraft(p.sampleGivenDate ?? ""); setEditingReceivedDate(true); }}

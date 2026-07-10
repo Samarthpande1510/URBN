@@ -19,7 +19,7 @@ function ActivityFeed() {
 
   function fmtTime(ts: string) {
     const d = new Date(ts);
-    return d.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+    return d.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" });
   }
 
   return (

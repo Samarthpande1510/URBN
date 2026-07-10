@@ -198,7 +198,7 @@ export default function ArchivedPage() {
                       <p className="mt-0.5 text-xs text-[#94a3b8]">
                         {p.factory && <span>{p.factory}</span>}
                         {p.rejectedBy && <span> · Rejected by <span className="text-[#64748b]">{p.rejectedBy}</span></span>}
-                        {p.statusChangedAt && <span> · Archived {new Date(p.statusChangedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>}
+                        {p.statusChangedAt && <span> · Archived {new Date(p.statusChangedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Kolkata" })}</span>}
                       </p>
                       <div className="mt-1.5 flex flex-wrap gap-1">
                         {getPipelineTrail(p).map((s, i) => (

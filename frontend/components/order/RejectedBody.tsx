@@ -104,7 +104,7 @@ function getPipelineTrail(p: ProductRow): string[] {
 
 function fmt(v: string | null | undefined) {
   if (!v) return null;
-  return new Date(v).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
+  return new Date(v).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" });
 }
 
 function DeadlineBadge({ deadline }: { deadline?: string | null }) {

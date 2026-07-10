@@ -112,12 +112,12 @@ function getPipelineTrail(p: ProductRow): string[] {
 
 function fmt(value: string | null) {
   if (!value) return null;
-  return new Date(value).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
+  return new Date(value).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" });
 }
 
 function fmtDate(value: string | null) {
   if (!value) return null;
-  return new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Kolkata" });
 }
 
 function getAddedToNpdDate(p: ProductRow): string | null {
@@ -136,7 +136,7 @@ function SingleReport({ report, version, label }: { report: { fileName: string |
         <span className={`rounded border px-2 py-0.5 text-xs font-semibold ${isPass ? "border-green-500/30 bg-green-500/10 text-green-400" : "border-red-500/30 bg-red-500/10 text-red-400"}`}>
           {isPass ? "Pass" : "Fail"}
         </span>
-        <span className="text-[11px] text-[#94a3b8] ml-auto">Submitted {new Date(report.submittedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
+        <span className="text-[11px] text-[#94a3b8] ml-auto">Submitted {new Date(report.submittedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Kolkata" })}</span>
       </div>
       {report.notes ? (
         <div className="rounded-md border border-[#bfdbfe]/30 bg-white px-3 py-2 text-xs text-[#0f172a] whitespace-pre-wrap leading-relaxed">{report.notes}</div>

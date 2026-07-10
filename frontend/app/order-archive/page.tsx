@@ -11,7 +11,7 @@ import { CheckCircle, Plus, X, Archive } from "lucide-react";
 
 function fmt(v: string | null) {
   if (!v) return null;
-  return new Date(v).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return new Date(v).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Kolkata" });
 }
 
 function OrderForm({ p, onDone }: { p: ProductRow; onDone: () => void }) {
