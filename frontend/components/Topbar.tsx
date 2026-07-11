@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Modal } from "./Modal";
 import { useProducts } from "@/lib/products-context";
 import { getSession, Session } from "@/lib/auth";
-import { Menu, Search, Upload, ZoomIn, X } from "lucide-react";
+import { Menu, Search, Upload, ZoomIn, X, PackageCheck, CheckCircle2 } from "lucide-react";
 import { NotificationBell } from "./NotificationBell";
 import { uploadFile } from "@/lib/upload";
 
@@ -35,6 +35,9 @@ const emptyForm = {
   const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [zoomOpen, setZoomOpen] = useState(false);
+  const [sampleDatePick, setSampleDatePick] = useState(() => new Date().toISOString().split("T")[0]);
+  const [editingSampleDate, setEditingSampleDate] = useState(false);
+  const [sampleDateDraft, setSampleDateDraft] = useState("");
 
   useEffect(() => {
     setSession(getSession());
@@ -64,6 +67,8 @@ const emptyForm = {
     setForm(emptyForm);
     setImageName(null);
     setImageDataUrl(null);
+    setSampleDatePick(new Date().toISOString().split("T")[0]);
+    setEditingSampleDate(false);
     setAddOpen(false);
    router.push("/dashboard");
   }
@@ -270,10 +275,62 @@ const emptyForm = {
             )}
           </div>
 
+          {/* Sample received — same pattern as NPD Testing */}
+          <div>
+            {form.sampleReceived ? (
+              <div className="rounded-lg border border-green-500/30 bg-green-500/10 px-4 py-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="flex items-center gap-2 text-sm font-semibold text-green-600">
+                    <CheckCircle2 size={18} className="shrink-0" />
+                    Sample received{form.sampleGivenDate ? ` — ${new Date(form.sampleGivenDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Kolkata" })}` : ""}
+                  </p>
+                  {!editingSampleDate && (
+                    <button type="button" onClick={() => { setSampleDateDraft(form.sampleGivenDate); setEditingSampleDate(true); }}
+                      className="shrink-0 rounded-md border border-green-500/30 px-2.5 py-1 text-[11px] font-medium text-green-700 hover:bg-green-500/10">
+                      Edit date
+                    </button>
+                  )}
+                </div>
+                {editingSampleDate && (
+                  <div className="mt-2 flex gap-2">
+                    <input type="date" value={sampleDateDraft} onChange={(e) => setSampleDateDraft(e.target.value)}
+                      max={new Date().toISOString().split("T")[0]}
+                      className="flex-1 rounded-md border border-green-500/30 bg-white px-3 py-1.5 text-sm text-[#0f172a] outline-none focus:border-green-500" />
+                    <button type="button" onClick={() => { update("sampleGivenDate", sampleDateDraft); setEditingSampleDate(false); }} disabled={!sampleDateDraft}
+                      className="rounded-md bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-40">
+                      Save
+                    </button>
+                    <button type="button" onClick={() => setEditingSampleDate(false)}
+                      className="rounded-md border border-green-500/30 px-3 py-1.5 text-xs font-medium text-green-700 hover:bg-green-500/10">
+                      Cancel
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => { update("sampleReceived", true); update("sampleGivenDate", sampleDatePick); }}
+                  className="flex w-full items-center justify-center gap-2 rounded-lg border-2 border-green-500/50 bg-green-500/10 px-4 py-4 text-base font-bold text-green-600 transition hover:bg-green-500/20"
+                >
+                  <PackageCheck size={20} />
+                  Sample received?
+                </button>
+                <div className="mt-2">
+                  <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-[#94a3b8]">Date received (defaults to today)</label>
+                  <input type="date" value={sampleDatePick} onChange={(e) => setSampleDatePick(e.target.value)}
+                    max={new Date().toISOString().split("T")[0]}
+                    className="w-full rounded-md border border-[#bfdbfe]/50 bg-white px-3 py-2 text-sm text-[#0f172a] outline-none focus:border-green-500" />
+                </div>
+              </>
+            )}
+          </div>
+
           <div className="flex gap-3 pt-2">
             <button
               type="button"
-              onClick={() => { setForm(emptyForm); setImageName(null); setImageDataUrl(null); }}
+              onClick={() => { setForm(emptyForm); setImageName(null); setImageDataUrl(null); setSampleDatePick(new Date().toISOString().split("T")[0]); setEditingSampleDate(false); }}
               className="rounded-md border border-[#bfdbfe]/50 bg-[#ffffff] px-4 py-2.5 text-sm font-medium text-[#64748b] hover:bg-[#eff6ff]"
             >
               Clear
