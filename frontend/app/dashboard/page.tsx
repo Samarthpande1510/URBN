@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, FormEvent } from "react";
+import { parseServerDate } from "@/lib/datetime";
 import { useToast } from "@/components/Toast";
 import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
 import { AppShell } from "@/components/AppShell";
@@ -17,7 +18,7 @@ const ACTIVE_FILTERS: ActiveFilter[] = ["All", "Pending NPD", "Pending Decision"
 
 function formatTimestamp(value: string | null) {
   if (!value) return null;
-  return new Date(value).toLocaleString("en-US", {
+  return parseServerDate(value).toLocaleString("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -539,7 +540,7 @@ export default function DashboardPage() {
                     {p.statusChangedAt ? formatTimestamp(p.statusChangedAt) : "—"}
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums text-[#d97706] whitespace-nowrap">
-                    {p.deadline ? new Date(p.deadline).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Kolkata" }) : <span className="text-[#94a3b8]">—</span>}
+                    {p.deadline ? parseServerDate(p.deadline).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Kolkata" }) : <span className="text-[#94a3b8]">—</span>}
                   </td>
                   <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center gap-1.5">
@@ -611,7 +612,7 @@ export default function DashboardPage() {
               {([
                 ["Priority", active.priority],
                 ["Factory", active.factory ?? "—"],
-                active.deadline ? ["Deadline", new Date(active.deadline).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Kolkata" })] : null,
+                active.deadline ? ["Deadline", parseServerDate(active.deadline).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Kolkata" })] : null,
               ].filter(Boolean) as string[][]).map(([label, value]) => (
                 <div key={label} className="flex justify-between border-b border-[#bfdbfe]/30 py-2">
                   <span className="text-[#1d4ed8]">{label}</span>
@@ -832,7 +833,7 @@ export default function DashboardPage() {
                 {[
                   ["Priority", p.priority],
                   ["Factory", p.factory ?? "—"],
-                  ["Deadline", new Date(p.deadline).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Kolkata" })],
+                  ["Deadline", parseServerDate(p.deadline).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Kolkata" })],
                   ["Status since", p.statusChangedAt ? formatTimestamp(p.statusChangedAt) : "—"],
                   ["Sample received", p.sampleReceived ? "Yes" : "No"],
                   p.sampleReceived && p.sampleGivenDate ? ["Given to QA on", p.sampleGivenDate] : null,

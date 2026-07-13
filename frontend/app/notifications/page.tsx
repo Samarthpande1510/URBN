@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { parseServerDate } from "@/lib/datetime";
 import { AppShell } from "@/components/AppShell";
 import { useProducts } from "@/lib/products-context";
 import { getSession } from "@/lib/auth";
@@ -21,7 +22,7 @@ function saveReadIds(ids: Set<string>) {
 }
 
 function relativeTime(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
+  const diff = Date.now() - parseServerDate(iso).getTime();
   const m = Math.floor(diff / 60000);
   if (m < 1) return "just now";
   if (m < 60) return `${m}m ago`;
@@ -29,7 +30,7 @@ function relativeTime(iso: string): string {
   if (h < 24) return `${h}h ago`;
   const d = Math.floor(h / 24);
   if (d < 7) return `${d}d ago`;
-  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "Asia/Kolkata" });
+  return parseServerDate(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "Asia/Kolkata" });
 }
 
 function getImportance(message: string): "high" | "medium" | "low" {

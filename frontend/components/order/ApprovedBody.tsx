@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { parseServerDate } from "@/lib/datetime";
 import { useProducts, type ProductRow } from "@/lib/products-context";
 import { api, apiErrorMessage } from "@/lib/api";
 import { getSession, Session } from "@/lib/auth";
@@ -116,12 +117,12 @@ function getPipelineTrail(p: ProductRow): string[] {
 
 function fmt(v: string | null) {
   if (!v) return null;
-  return new Date(v).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" });
+  return parseServerDate(v).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" });
 }
 
 function DeadlineBadge({ deadline }: { deadline?: string | null }) {
   if (!deadline) return null;
-  const days = Math.ceil((new Date(deadline).getTime() - Date.now()) / 86400000);
+  const days = Math.ceil((parseServerDate(deadline).getTime() - Date.now()) / 86400000);
   if (days < 0)  return <span className="rounded bg-red-500/15 px-2 py-0.5 text-[11px] font-semibold text-red-400">{Math.abs(days)}d overdue</span>;
   if (days <= 3) return <span className="rounded bg-orange-500/15 px-2 py-0.5 text-[11px] font-semibold text-orange-400">{days}d left</span>;
   if (days <= 7) return <span className="rounded bg-yellow-500/10 px-2 py-0.5 text-[11px] font-semibold text-yellow-400">{days}d left</span>;
@@ -202,7 +203,7 @@ function PendingRow({ p, canOrder, onAction }: {
         <div className="flex items-center justify-end gap-2">
           <DeadlineBadge deadline={p.deadline} />
           <span className="tabular-nums text-[#d97706] text-xs">
-            {new Date(p.deadline).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Kolkata" })}
+            {parseServerDate(p.deadline).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Kolkata" })}
           </span>
         </div>
       </td>
@@ -284,7 +285,7 @@ function HeldRow({ p, canOrder, onDrop, onReinstate, onPlace }: {
         <div className="flex items-center justify-end gap-2">
           <DeadlineBadge deadline={p.deadline} />
           <span className="tabular-nums text-[#d97706] text-xs">
-            {new Date(p.deadline).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Kolkata" })}
+            {parseServerDate(p.deadline).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Kolkata" })}
           </span>
         </div>
       </td>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { parseServerDate } from "@/lib/datetime";
 import { ChevronDown, ChevronUp, CheckCircle, Circle, X } from "lucide-react";
 import { GridBeam } from "@/components/ui/grid-beam";
 import { AppShell } from "@/components/AppShell";
@@ -13,12 +14,12 @@ import { useToast } from "@/components/Toast";
 
 function fmt(v: string | null) {
   if (!v) return null;
-  return new Date(v).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" });
+  return parseServerDate(v).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" });
 }
 
 function fmtDate(v: string | null | undefined) {
   if (!v) return "—";
-  return new Date(v).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Kolkata" });
+  return parseServerDate(v).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Kolkata" });
 }
 
 const STAGE_PILL_STYLE: Record<string, string> = {
@@ -147,7 +148,7 @@ function getGoldenStage(p: ProductRow): string {
 
 function DeadlineBadge({ deadline }: { deadline?: string | null }) {
   if (!deadline) return null;
-  const days = Math.ceil((new Date(deadline).getTime() - Date.now()) / 86400000);
+  const days = Math.ceil((parseServerDate(deadline).getTime() - Date.now()) / 86400000);
   if (days < 0)  return <span className="rounded bg-red-500/15 px-2 py-0.5 text-[11px] font-semibold text-red-400">{Math.abs(days)}d overdue</span>;
   if (days <= 3) return <span className="rounded bg-orange-500/15 px-2 py-0.5 text-[11px] font-semibold text-orange-400">{days}d left</span>;
   if (days <= 7) return <span className="rounded bg-yellow-500/10 px-2 py-0.5 text-[11px] font-semibold text-yellow-400">{days}d left</span>;
@@ -291,8 +292,8 @@ function GoldenSampleSection({ gw, isQA, addNotification, showToast, productId, 
         <>
           {/* Timestamps */}
           <div className="flex flex-wrap gap-x-6 gap-y-1">
-            <p className="text-xs text-[#64748b]">Requested: <span className="text-[#d97706]">{new Date(gs.requestedAt).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" })}</span></p>
-            {received && gs.receivedAt && <p className="text-xs text-green-600 font-semibold flex items-center gap-1"><CheckCircle size={11} /> Received: {new Date(gs.receivedAt).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" })}</p>}
+            <p className="text-xs text-[#64748b]">Requested: <span className="text-[#d97706]">{parseServerDate(gs.requestedAt).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" })}</span></p>
+            {received && gs.receivedAt && <p className="text-xs text-green-600 font-semibold flex items-center gap-1"><CheckCircle size={11} /> Received: {parseServerDate(gs.receivedAt).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" })}</p>}
           </div>
 
           {/* Editable expected date */}
@@ -428,7 +429,7 @@ function GoldenCard({ product, isQA }: { product: ProductRow; isQA: boolean }) {
           </p>
           <p className="text-xs text-[#1d4ed8] mt-0.5">
             {product.urbnModelNo && <span className="text-[#0f172a] font-medium">{product.urbnModelNo} · </span>}
-            Supplier: {product.skuCode} · Deadline <span className="text-[#d97706] font-semibold">{new Date(product.deadline).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Kolkata" })}</span>
+            Supplier: {product.skuCode} · Deadline <span className="text-[#d97706] font-semibold">{parseServerDate(product.deadline).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Kolkata" })}</span>
           </p>
         </div>
         <Chip color={PRIORITY_DOT[product.priority]} label={product.priority} />

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { parseServerDate } from "@/lib/datetime";
 import { Modal } from "@/components/Modal";
 import { useProducts, Status, ProductRow, HoldStatus } from "@/lib/products-context";
 import { PRIORITY_DOT } from "@/lib/colors";
@@ -129,12 +130,12 @@ function getPipelineTrail(p: ProductRow): string[] {
 
 function fmt(value: string | null) {
   if (!value) return null;
-  return new Date(value).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" });
+  return parseServerDate(value).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" });
 }
 
 function DeadlineBadge({ deadline }: { deadline?: string | null }) {
   if (!deadline) return null;
-  const days = Math.ceil((new Date(deadline).getTime() - Date.now()) / 86400000);
+  const days = Math.ceil((parseServerDate(deadline).getTime() - Date.now()) / 86400000);
   if (days < 0)  return <span className="rounded bg-red-500/15 px-2 py-0.5 text-[11px] font-semibold text-red-400">{Math.abs(days)}d overdue</span>;
   if (days <= 3) return <span className="rounded bg-orange-500/15 px-2 py-0.5 text-[11px] font-semibold text-orange-400">{days}d left</span>;
   if (days <= 7) return <span className="rounded bg-yellow-500/10 px-2 py-0.5 text-[11px] font-semibold text-yellow-400">{days}d left</span>;

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { parseServerDate } from "@/lib/datetime";
 import { AppShell } from "@/components/AppShell";
 import { useProducts, ProductRow, ColorOrder } from "@/lib/products-context";
 import { PRIORITY_DOT } from "@/lib/colors";
@@ -11,7 +12,7 @@ import { CheckCircle, Plus, X, Archive } from "lucide-react";
 
 function fmt(v: string | null) {
   if (!v) return null;
-  return new Date(v).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Kolkata" });
+  return parseServerDate(v).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Kolkata" });
 }
 
 function OrderForm({ p, onDone }: { p: ProductRow; onDone: () => void }) {

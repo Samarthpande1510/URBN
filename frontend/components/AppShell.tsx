@@ -1,6 +1,7 @@
 "use client";
 
 import { ReactNode, useEffect, useState } from "react";
+import { parseServerDate } from "@/lib/datetime";
 import { useRouter } from "next/navigation";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
@@ -14,11 +15,11 @@ function ActivityFeed() {
     .flatMap((p) =>
       p.activityLog.map((e) => ({ ...e, productName: p.codeName }))
     )
-    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+    .sort((a, b) => parseServerDate(b.timestamp).getTime() - parseServerDate(a.timestamp).getTime())
     .slice(0, 15);
 
   function fmtTime(ts: string) {
-    const d = new Date(ts);
+    const d = parseServerDate(ts);
     return d.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" });
   }
 

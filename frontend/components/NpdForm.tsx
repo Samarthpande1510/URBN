@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, FormEvent, DragEvent } from "react";
+import { parseServerDate } from "@/lib/datetime";
 import { useProducts, ProductRow, NpdReport, Status, FactoryComm } from "@/lib/products-context";
 import { api, apiErrorMessage } from "@/lib/api";
 import { PRIORITY_DOT } from "@/lib/colors";
@@ -11,12 +12,12 @@ import { uploadFile } from "@/lib/upload";
 
 function fmt(value: string | null) {
   if (!value) return null;
-  return new Date(value).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" });
+  return parseServerDate(value).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" });
 }
 
 function DeadlineBadge({ deadline }: { deadline?: string | null }) {
   if (!deadline) return null;
-  const days = Math.ceil((new Date(deadline).getTime() - Date.now()) / 86400000);
+  const days = Math.ceil((parseServerDate(deadline).getTime() - Date.now()) / 86400000);
   if (days < 0)  return <span className="rounded bg-red-500/15 px-2 py-0.5 text-[11px] font-semibold text-red-400">{Math.abs(days)}d overdue</span>;
   if (days <= 3) return <span className="rounded bg-orange-500/15 px-2 py-0.5 text-[11px] font-semibold text-orange-400">{days}d left</span>;
   if (days <= 7) return <span className="rounded bg-yellow-500/10 px-2 py-0.5 text-[11px] font-semibold text-yellow-400">{days}d left</span>;
@@ -144,7 +145,7 @@ export function NpdForm({ p, onSubmit }: { p: ProductRow; onSubmit?: () => void 
         <div className="flex-1 min-w-0">
           <p className="text-lg font-semibold text-slate-900">{p.codeName}</p>
           <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-            <p className="text-xs text-[#1d4ed8]">{p.skuCode} · <span className="text-[#64748b]">{new Date(p.deadline).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Kolkata" })}</span></p>
+            <p className="text-xs text-[#1d4ed8]">{p.skuCode} · <span className="text-[#64748b]">{parseServerDate(p.deadline).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Kolkata" })}</span></p>
             <DeadlineBadge deadline={p.deadline} />
           </div>
           {p.factory && <p className="mt-0.5 text-xs text-[#94a3b8]">Factory: {p.factory}</p>}
@@ -160,7 +161,7 @@ export function NpdForm({ p, onSubmit }: { p: ProductRow; onSubmit?: () => void 
             <div className="flex items-center justify-between gap-2">
               <p className="flex items-center gap-2 text-sm font-semibold text-green-600">
                 <CheckCircle2 size={18} className="shrink-0" />
-                Sample received{p.sampleGivenDate ? ` — ${new Date(p.sampleGivenDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Kolkata" })}` : ""}
+                Sample received{p.sampleGivenDate ? ` — ${parseServerDate(p.sampleGivenDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Kolkata" })}` : ""}
               </p>
               {!editingReceivedDate && (
                 <button type="button" onClick={() => { setReceivedDateDraft(p.sampleGivenDate ?? ""); setEditingReceivedDate(true); }}

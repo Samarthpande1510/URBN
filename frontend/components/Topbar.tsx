@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, useEffect, FormEvent } from "react";
+import { parseServerDate } from "@/lib/datetime";
 import { useRouter } from "next/navigation";
 import { Modal } from "./Modal";
 import { useProducts } from "@/lib/products-context";
@@ -282,7 +283,7 @@ const emptyForm = {
                 <div className="flex items-center justify-between gap-2">
                   <p className="flex items-center gap-2 text-sm font-semibold text-green-600">
                     <CheckCircle2 size={18} className="shrink-0" />
-                    Sample received{form.sampleGivenDate ? ` — ${new Date(form.sampleGivenDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Kolkata" })}` : ""}
+                    Sample received{form.sampleGivenDate ? ` — ${parseServerDate(form.sampleGivenDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Kolkata" })}` : ""}
                   </p>
                   {!editingSampleDate && (
                     <button type="button" onClick={() => { setSampleDateDraft(form.sampleGivenDate); setEditingSampleDate(true); }}

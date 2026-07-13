@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { parseServerDate } from "@/lib/datetime";
 import { AppShell } from "@/components/AppShell";
 import { Modal } from "@/components/Modal";
 import { useProducts, ProductRow, FactoryComm, FactoryReplySummary, InternalDecision, HoldCaseEntry, Status, NpdReport } from "@/lib/products-context";
@@ -52,18 +53,18 @@ function defaultFactoryComm(now: string): FactoryComm {
 
 function fmt(v: string | null | undefined) {
   if (!v) return null;
-  return new Date(v).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" });
+  return parseServerDate(v).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" });
 }
 function fmtAt(v: string | null | undefined) {
   if (!v) return "";
-  const d = new Date(v);
+  const d = parseServerDate(v);
   const date = d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Kolkata" });
   const time = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" });
   return `${date} at ${time}`;
 }
 function fmtDate(v: string | null | undefined) {
   if (!v) return "—";
-  return new Date(v).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Kolkata" });
+  return parseServerDate(v).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Kolkata" });
 }
 
 function todayStr() {
