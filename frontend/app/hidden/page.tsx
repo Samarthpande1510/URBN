@@ -17,6 +17,7 @@ const STAGE_PILL_STYLE: Record<string, string> = {
   "EMAILED TO FACTORY":      "bg-[#eff6ff] text-[#3b82f6] border-[#93c5fd]/40",
   "DECISION PENDING":        "bg-amber-500/10 text-amber-500 border-amber-500/30",
   "GOLDEN SAMPLES PENDING":  "bg-purple-500/10 text-purple-400 border-purple-500/25",
+  "ORDER PENDING":           "bg-purple-500/10 text-purple-400 border-purple-500/25",
   "REVISED SAMPLE REQUESTED":"bg-[#eff6ff] text-[#3b82f6] border-[#93c5fd]/40",
   "REVISED SAMPLE PENDING":  "bg-amber-500/10 text-amber-400 border-amber-500/30",
   "REVISED SAMPLE RECEIVED": "bg-[#eff6ff] text-[#0ea5e9] border-[#0ea5e9]/25",
@@ -84,7 +85,7 @@ function getPipelineTrail(p: ProductRow): string[] {
   if (p.status === "Approved" || p.status === "Pending NPD" || p.status === "Pending Decision") {
     if (fc?.replyReceivedAt) stages.push("EMAILED TO FACTORY", "REVISED SAMPLE REQUESTED", "REVISED SAMPLE RECEIVED");
     if (!gw?.purchaseNotifiedAt) {
-      stages.push(p.status === "Pending Decision" ? "DECISION PENDING" : "GOLDEN SAMPLES PENDING");
+      stages.push(p.status === "Pending Decision" ? "DECISION PENDING" : "ORDER PENDING");
       return stages;
     }
     stages.push("PURCHASE TEAM NOTIFIED");
