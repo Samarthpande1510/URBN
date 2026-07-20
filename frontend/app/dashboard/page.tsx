@@ -9,6 +9,7 @@ import { Modal } from "@/components/Modal";
 import { Chip } from "@/components/Chip";
 import { useProducts, Status, ProductRow } from "@/lib/products-context";
 import { STATUS_DOT, PRIORITY_DOT } from "@/lib/colors";
+import { getDisplayStatusLabel, getDisplayStatusColor } from "@/lib/orderStatus";
 import { GridBeam } from "@/components/ui/grid-beam";
 import { getSession } from "@/lib/auth";
 import { api, apiErrorMessage } from "@/lib/api";
@@ -531,7 +532,7 @@ export default function DashboardPage() {
                     <Chip color={PRIORITY_DOT[p.priority]} label={p.priority} />
                   </td>
                   <td className="px-4 py-3">
-                    <Chip color={STATUS_DOT[p.status]} label={p.status} />
+                    <Chip color={getDisplayStatusColor(p)} label={getDisplayStatusLabel(p)} />
                     <p className="mt-1 text-[11px] text-[#64748b] leading-snug max-w-[180px]">{getPipelineStage(p)}</p>
                   </td>
                   <td className="px-4 py-3 max-w-xs">
@@ -799,10 +800,13 @@ export default function DashboardPage() {
             "Pending NPD":      "Waiting for QA to run NPD testing",
             "Pending Decision": "NPD report submitted — waiting for CEO / Dev decision",
             "Approved":         "Approved — currently in the golden product workflow",
+            "Order On Hold":    "Order put on hold from Order Confirmation",
+            "Order Dropped":    "Order dropped from Order Confirmation",
             "On hold":          "On hold — currently in talks with the factory",
             "Rejected":         "Rejected — pending CEO confirmation before archiving",
             "Archived":         "Archived — confirmed by CEO, out of the pipeline",
           };
+          const displayStatus = getDisplayStatusLabel(p);
 
           return (
             <div>
@@ -824,10 +828,10 @@ export default function DashboardPage() {
                   <span className="text-[#1d4ed8] shrink-0">Status</span>
                   <div className="text-right">
                     <div className="flex items-center justify-end gap-1.5">
-                      <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: STATUS_DOT[p.status] }} />
-                      <span className="font-medium text-[#0f172a]">{p.status}</span>
+                      <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: getDisplayStatusColor(p) }} />
+                      <span className="font-medium text-[#0f172a]">{displayStatus}</span>
                     </div>
-                    <p className="mt-0.5 text-[11px] text-[#64748b]">{statusLabel[p.status]}</p>
+                    <p className="mt-0.5 text-[11px] text-[#64748b]">{statusLabel[displayStatus]}</p>
                   </div>
                 </div>
 

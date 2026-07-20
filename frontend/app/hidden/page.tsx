@@ -5,7 +5,8 @@ import { AppShell } from "@/components/AppShell";
 import { useProducts, ProductRow } from "@/lib/products-context";
 import { api, apiErrorMessage } from "@/lib/api";
 import { useToast } from "@/components/Toast";
-import { PRIORITY_DOT, STATUS_DOT } from "@/lib/colors";
+import { PRIORITY_DOT } from "@/lib/colors";
+import { getDisplayStatusLabel, getDisplayStatusColor } from "@/lib/orderStatus";
 import { Chip } from "@/components/Chip";
 import { EyeOff, Eye } from "lucide-react";
 
@@ -189,7 +190,7 @@ export default function HiddenPage() {
                     <Chip color={PRIORITY_DOT[p.priority]} label={p.priority} />
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
-                    <Chip color={STATUS_DOT[p.status]} label={p.status} />
+                    <Chip color={getDisplayStatusColor(p)} label={getDisplayStatusLabel(p)} />
                   </td>
                   <td className="px-4 py-3 max-w-xs">
                     <StagePills stages={getPipelineTrail(p)} />

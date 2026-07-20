@@ -5,7 +5,8 @@ import { parseServerDate } from "@/lib/datetime";
 import { AppShell } from "@/components/AppShell";
 import { useProducts, ProductRow } from "@/lib/products-context";
 import { api } from "@/lib/api";
-import { PRIORITY_DOT, STATUS_DOT } from "@/lib/colors";
+import { PRIORITY_DOT } from "@/lib/colors";
+import { getDisplayStatusLabel, getDisplayStatusColor } from "@/lib/orderStatus";
 import { Chip } from "@/components/Chip";
 import { Modal } from "@/components/Modal";
 import { NpdForm } from "@/components/NpdForm";
@@ -450,7 +451,7 @@ export default function NpdTestingPage() {
                     {showHistory ? (
                       <>
                         <td className="px-4 py-3 whitespace-nowrap">
-                          <Chip color={STATUS_DOT[p.status]} label={p.status} />
+                          <Chip color={getDisplayStatusColor(p)} label={getDisplayStatusLabel(p)} />
                         </td>
                         <td className="px-4 py-3 max-w-xs">
                           <StagePills stages={getPipelineTrail(p)} />
