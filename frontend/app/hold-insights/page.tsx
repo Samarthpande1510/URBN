@@ -4,10 +4,11 @@ import { useState, useEffect } from "react";
 import { parseServerDate } from "@/lib/datetime";
 import { AppShell } from "@/components/AppShell";
 import { Modal } from "@/components/Modal";
-import { useProducts, ProductRow, FactoryComm, FactoryReplySummary, InternalDecision, HoldCaseEntry, Status, NpdReport } from "@/lib/products-context";
+import { useProducts, ProductRow, FactoryComm, FactoryReplySummary, InternalDecision, NpdReport } from "@/lib/products-context";
 import { getSession, Session, Role } from "@/lib/auth";
 import { useToast } from "@/components/Toast";
 import { GridBeam } from "@/components/ui/grid-beam";
+import { api, apiErrorMessage } from "@/lib/api";
 import { X } from "lucide-react";
 
 const ALL_ROLES: Role[] = ["CEO", "Dev", "Sales", "QA"];
@@ -44,13 +45,6 @@ interface HoldCase {
   stage: Stage;
 }
 
-function defaultFactoryComm(now: string): FactoryComm {
-  return {
-    decidedAction: "EMAIL_FACTORY", decidedAt: now, acknowledgedAt: null, replyAt: null, replyText: null,
-    tentativeReturnDate: null, editHistory: [], caseLog: [],
-  };
-}
-
 function fmt(v: string | null | undefined) {
   if (!v) return null;
   return parseServerDate(v).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" });
@@ -81,7 +75,7 @@ const FILTERS: { key: Filter; label: string }[] = [
 ];
 
 export default function HoldInsightsPage() {
-  const { products, setProducts, addNotification, search } = useProducts();
+  const { products, setProducts, addNotification, refreshProducts, search } = useProducts();
   const { showToast } = useToast();
   const [session, setSession] = useState<Session | null>(null);
   const [filter, setFilter] = useState<Filter>("All");
@@ -145,19 +139,6 @@ export default function HoldInsightsPage() {
   });
 
   const selected = cases.find((c) => c.product.id === selectedId) ?? null;
-
-  function patchFC(productId: number, fn: (fc: FactoryComm) => FactoryComm) {
-    const now = new Date().toISOString();
-    setProducts((prev) => prev.map((p) => {
-      if (p.id !== productId) return p;
-      const base = p.factoryComm ?? defaultFactoryComm(now);
-      return { ...p, factoryComm: fn(base), statusChangedAt: now };
-    }));
-  }
-
-  function pushLog(productId: number, entry: HoldCaseEntry) {
-    patchFC(productId, (fc) => ({ ...fc, caseLog: [...(fc.caseLog ?? []), entry] }));
-  }
 
   return (
     <AppShell>
@@ -262,11 +243,10 @@ export default function HoldInsightsPage() {
             isReadOnly={isReadOnly}
             session={session}
             onClose={() => setSelectedId(null)}
-            patchFC={patchFC}
-            pushLog={pushLog}
             setProducts={setProducts}
             addNotification={addNotification}
             showToast={showToast}
+            refreshProducts={refreshProducts}
           />
         )}
       </Modal>
@@ -307,20 +287,33 @@ function ImprovSampleCard({ tick, setTick, date, setDate, onConfirm, nextVersion
 
 // ─── Detail modal content ───────────────────────────────────────────────────
 
-function HoldCaseDetail({ holdCase, isQA, isReadOnly, session, onClose, patchFC, pushLog, setProducts, addNotification, showToast }: {
+function HoldCaseDetail({ holdCase, isQA, isReadOnly, session, onClose, setProducts, addNotification, showToast, refreshProducts }: {
   holdCase: HoldCase;
   isQA: boolean;
   isReadOnly: boolean;
   session: Session | null;
   onClose: () => void;
-  patchFC: (productId: number, fn: (fc: FactoryComm) => FactoryComm) => void;
-  pushLog: (productId: number, entry: HoldCaseEntry) => void;
   setProducts: ReturnType<typeof useProducts>["setProducts"];
   addNotification: ReturnType<typeof useProducts>["addNotification"];
   showToast: (msg: string) => void;
+  refreshProducts: () => Promise<void>;
 }) {
   const { product: p, fc, source, stage } = holdCase;
   const canAct = !isReadOnly;
+  const [busy, setBusy] = useState(false);
+
+  async function withApiCall(fn: () => Promise<void>) {
+    setBusy(true);
+    try {
+      await fn();
+    } catch (err: unknown) {
+      const { message, isConflict } = apiErrorMessage(err);
+      if (isConflict) await refreshProducts();
+      showToast(isConflict ? message : `Error: ${message}`);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   const [expectedDate, setExpectedDate] = useState(fc?.expectedReplyDate ?? "");
   const [replySummary, setReplySummary] = useState<FactoryReplySummary | "">("");
@@ -336,74 +329,74 @@ function HoldCaseDetail({ holdCase, isQA, isReadOnly, session, onClose, patchFC,
   const [orderColors, setOrderColors] = useState<{ color: string; quantity: string }[]>([{ color: "", quantity: "" }]);
   const [improvSampleTick, setImprovSampleTick] = useState(false);
   const [improvSampleDate, setImprovSampleDate] = useState("");
+  const [receivedDate, setReceivedDate] = useState(todayStr());
 
   const now = () => new Date().toISOString();
 
-  function logAwaitingReply() {
+  async function logAwaitingReply() {
     if (!expectedDate) return;
-    const t = now();
-    patchFC(p.id, (f) => ({ ...f, expectedReplyDate: expectedDate, reminderSentForDate: null }));
-    pushLog(p.id, { stage: "Factory Not Responded", note: `Feedback shared — awaiting factory reply by ${fmtDate(expectedDate)}`, timestamp: t });
-    addNotification({ targetRoles: ALL_ROLES, productId: p.id, productName: p.codeName, message: `${p.codeName} — awaiting factory reply by ${fmtDate(expectedDate)}.` });
-    showToast("Logged — awaiting factory reply");
+    await withApiCall(async () => {
+      const note = `Feedback shared — awaiting factory reply by ${fmtDate(expectedDate)}`;
+      await api.products.factoryExpectedDate(p.id, expectedDate, p.version);
+      await api.products.factoryCaseLog(p.id, "Factory Not Responded", note);
+      await refreshProducts();
+      addNotification({ targetRoles: ALL_ROLES, productId: p.id, productName: p.codeName, message: `${p.codeName} — awaiting factory reply by ${fmtDate(expectedDate)}.` });
+      showToast("Logged — awaiting factory reply");
+    });
   }
 
-  function logFactoryReply() {
+  async function logFactoryReply() {
     if (!replySummary) return;
-    const t = now();
     const displaySummary = replySummary === "Decision Pending" ? "Awaiting Factory Decision" : replySummary;
-    patchFC(p.id, (f) => ({ ...f, replyReceivedAt: t, replySummary: replySummary as FactoryReplySummary }));
-    pushLog(p.id, { stage: "Factory Replied", note: `Reply received — ${displaySummary}${replyNotes ? ` · ${replyNotes}` : ""}`, timestamp: t });
-    addNotification({ targetRoles: ALL_ROLES, productId: p.id, productName: p.codeName, message: `${p.codeName} — factory replied: ${displaySummary}.` });
-    showToast("Factory reply logged");
-    setReplySummary(""); setReplyNotes("");
+    await withApiCall(async () => {
+      const note = `Reply received — ${displaySummary}${replyNotes ? ` · ${replyNotes}` : ""}`;
+      await api.products.factoryLogReply(p.id, replySummary, replyNotes || undefined, p.version);
+      await api.products.factoryCaseLog(p.id, "Factory Replied", note);
+      await refreshProducts();
+      addNotification({ targetRoles: ALL_ROLES, productId: p.id, productName: p.codeName, message: `${p.codeName} — factory replied: ${displaySummary}.` });
+      showToast("Factory reply logged");
+      setReplySummary(""); setReplyNotes("");
+    });
   }
 
-  function logPartialResolved() {
-    const t = now();
-    patchFC(p.id, (f) => ({ ...f, partialResolvedAt: t }));
-    pushLog(p.id, { stage: "Factory Decision Pending", note: `Factory finalized pending points${partialNotes ? ` — ${partialNotes}` : ""}`, timestamp: t });
-    showToast("Factory decision logged");
-    setPartialNotes("");
+  async function logPartialResolved() {
+    await withApiCall(async () => {
+      const note = `Factory finalized pending points${partialNotes ? ` — ${partialNotes}` : ""}`;
+      await api.products.factoryPartialResolved(p.id, partialNotes || undefined, p.version);
+      await api.products.factoryCaseLog(p.id, "Factory Decision Pending", note);
+      await refreshProducts();
+      showToast("Factory decision logged");
+      setPartialNotes("");
+    });
   }
 
-  function applyInternalDecision(decision: "Approved" | "Rejected") {
-    const t = now();
+  async function applyInternalDecision(decision: "Approved" | "Rejected") {
     const by = session?.name ?? "Unknown";
-    patchFC(p.id, (f) => ({ ...f, internalDecision: decision, internalDecisionAt: t, internalDecisionBy: by, internalDecisionNotes: decisionNotes.trim() || undefined }));
     const verb = decision === "Approved" ? `${by} has approved` : `${by} has rejected`;
-    pushLog(p.id, { stage: "Internal Decision Pending", note: `${verb}${decisionNotes ? ` — ${decisionNotes}` : ""}`, timestamp: t });
 
-    // Reflect the decision on the underlying product
+    if (source === "On Hold") {
+      await withApiCall(async () => {
+        await api.products.factoryInternalDecision(p.id, {
+          decision,
+          notes: decisionNotes.trim() || undefined,
+          improvement_needed: improvementNeeded,
+          improvement_remarks: improvementNeeded ? (improvementRemarks.trim() || undefined) : undefined,
+        }, p.version);
+        await api.products.factoryCaseLog(p.id, "Internal Decision Pending", `${verb}${decisionNotes ? ` — ${decisionNotes}` : ""}`);
+        await refreshProducts();
+        addNotification({ targetRoles: ALL_ROLES, productId: p.id, productName: p.codeName, message: `${verb} for ${p.codeName}.` });
+        showToast(`${decision} — case resolved`);
+        setDecisionNotes(""); setImprovementNeeded(false); setImprovementRemarks("");
+      });
+      return;
+    }
+
+    // NOTE: "Improvement Sample" (post-approval golden-sample resolution) has
+    // no backend endpoint yet — this path stays local-only for now and will
+    // NOT survive a refresh. Flagged as a known gap, not silently "fixed".
+    const t = now();
     setProducts((prev) => prev.map((x) => {
       if (x.id !== p.id) return x;
-      if (source === "On Hold") {
-        if (decision === "Approved") {
-          const code = "AP-" + Math.random().toString(36).slice(2, 5).toUpperCase();
-          return {
-            ...x,
-            status: "Approved" as Status,
-            statusChangedAt: t,
-            orderDecision: {
-              state: "pending", internalCode: code, decidedAt: null, decidedBy: null, colors: [],
-              improvedGoldenSampleExpected: improvementNeeded,
-              improvementNotes: improvementNeeded ? (improvementRemarks.trim() || undefined) : undefined,
-            },
-            activityLog: [...x.activityLog, {
-              action: improvementNeeded
-                ? `${verb} — moved to Approved — improvement requirement${improvementRemarks ? ` · ${improvementRemarks}` : ""}`
-                : `${verb} — moved to Approved`,
-              timestamp: t,
-              stages: improvementNeeded ? ["EMAILED TO FACTORY", "IMPROVEMENT REQUIREMENT"] : ["EMAILED TO FACTORY"],
-            }],
-          };
-        }
-        return {
-          ...x, status: "Rejected" as Status, statusChangedAt: t,
-          activityLog: [...x.activityLog, { action: `${verb} — moved to Rejected`, timestamp: t, stages: ["REJECTED"] }],
-        };
-      }
-      // Improvement-sample case: mark resolved on the golden sample
       if (x.goldenWorkflow?.goldenSample) {
         return {
           ...x,
@@ -417,7 +410,7 @@ function HoldCaseDetail({ holdCase, isQA, isReadOnly, session, onClose, patchFC,
       return x;
     }));
     addNotification({ targetRoles: ALL_ROLES, productId: p.id, productName: p.codeName, message: `${verb} for ${p.codeName}.` });
-    showToast(`${decision} — case resolved`);
+    showToast(`${decision} — case resolved (not yet persisted — backend endpoint pending)`);
     setDecisionNotes(""); setImprovementNeeded(false); setImprovementRemarks("");
   }
 
@@ -425,39 +418,31 @@ function HoldCaseDetail({ holdCase, isQA, isReadOnly, session, onClose, patchFC,
     setOrderColors((prev) => prev.map((c, j) => j === i ? { ...c, [field]: value } : c));
   }
 
-  function confirmOrderPlace() {
-    const t = now();
+  async function confirmOrderPlace() {
     const by = session?.name ?? "Unknown";
     const validColors = orderColors.filter((c) => c.color.trim()).map((c) => ({ color: c.color.trim(), quantity: parseInt(c.quantity) || 0 }));
 
     if (source === "On Hold" && validColors.length === 0) return;
 
-    patchFC(p.id, (f) => ({ ...f, internalDecision: "Order Placed", internalDecisionAt: t, internalDecisionBy: by, internalDecisionNotes: decisionNotes.trim() || undefined }));
+    if (source === "On Hold") {
+      await withApiCall(async () => {
+        const note = `${by} placed order — ${validColors.map((c) => `${c.color} ×${c.quantity}`).join(", ")}${decisionNotes ? ` · ${decisionNotes}` : ""}`;
+        await api.products.factoryInternalDecision(p.id, { decision: "Order Placed", notes: decisionNotes.trim() || undefined, colors: validColors }, p.version);
+        await api.products.factoryCaseLog(p.id, "Internal Decision Pending", note);
+        await refreshProducts();
+        addNotification({ targetRoles: ALL_ROLES, productId: p.id, productName: p.codeName, message: `Order placed for ${p.codeName} — Golden Sample started.` });
+        showToast("Order placed — case resolved");
+        setDecisionNotes(""); setOrderColors([{ color: "", quantity: "" }]); setShowOrderPlaceForm(false);
+      });
+      return;
+    }
 
-    const note = source === "On Hold"
-      ? `${by} placed order — ${validColors.map((c) => `${c.color} ×${c.quantity}`).join(", ")}${decisionNotes ? ` · ${decisionNotes}` : ""}`
-      : `${by} confirmed continuing with existing order — improvement resolved${decisionNotes ? ` · ${decisionNotes}` : ""}`;
-    pushLog(p.id, { stage: "Internal Decision Pending", note, timestamp: t });
-
+    // NOTE: "continue with existing order, improvement resolved" has no backend
+    // endpoint yet — stays local-only and will NOT survive a refresh. Flagged
+    // as a known gap, not silently treated as persisted.
+    const t = now();
     setProducts((prev) => prev.map((x) => {
       if (x.id !== p.id) return x;
-      if (source === "On Hold") {
-        const code = "AP-" + Math.random().toString(36).slice(2, 5).toUpperCase();
-        return {
-          ...x,
-          status: "Approved" as Status,
-          statusChangedAt: t,
-          orderDecision: { state: "placed", internalCode: code, decidedAt: t, decidedBy: by, colors: validColors },
-          goldenWorkflow: {
-            purchaseNotifiedAt: t,
-            orderConfirmedAt: t,
-            purchaseLog: [{ action: `Order placed (${code}) — ${validColors.map((c) => `${c.color} ×${c.quantity}`).join(", ")}`, timestamp: t }],
-            details: null, compliance: null, packaging: null,
-            goldenSample: { status: "Requested", expectedDate: "", receivedAt: null, approvedAt: null, improvementFixed: null, improvementFixedAt: null, improvementFixedNotes: null, log: [{ action: "Golden sample requested", timestamp: t }] },
-          },
-          activityLog: [...x.activityLog, { action: `Order placed (${code}) from Hold — moving to Golden Sample`, timestamp: t, stages: ["ORDER PLACED"] }],
-        };
-      }
       if (x.goldenWorkflow?.goldenSample) {
         return {
           ...x,
@@ -470,42 +455,45 @@ function HoldCaseDetail({ holdCase, isQA, isReadOnly, session, onClose, patchFC,
       }
       return x;
     }));
-
-    addNotification({ targetRoles: ALL_ROLES, productId: p.id, productName: p.codeName, message: source === "On Hold" ? `Order placed for ${p.codeName} — Golden Sample started.` : `${p.codeName} — improvement resolved, continuing with existing order.` });
-    showToast("Order placed — case resolved");
+    addNotification({ targetRoles: ALL_ROLES, productId: p.id, productName: p.codeName, message: `${p.codeName} — improvement resolved, continuing with existing order.` });
+    showToast("Order placed — case resolved (not yet persisted — backend endpoint pending)");
     setDecisionNotes(""); setOrderColors([{ color: "", quantity: "" }]); setShowOrderPlaceForm(false);
   }
 
-  function sendBackToFactory() {
+  async function sendBackToFactory() {
     if (!sendBackDate) return;
-    const t = now();
-    patchFC(p.id, (f) => ({ ...f, replyReceivedAt: null, replySummary: null, partialResolvedAt: null, expectedReplyDate: sendBackDate, reminderSentForDate: null }));
-    pushLog(p.id, { stage: "Factory Not Responded", note: `Sent back to factory — awaiting reply by ${fmtDate(sendBackDate)}${sendBackNote ? ` · ${sendBackNote}` : ""}`, timestamp: t });
-    addNotification({ targetRoles: ALL_ROLES, productId: p.id, productName: p.codeName, message: `${p.codeName} — sent back to factory, awaiting reply by ${fmtDate(sendBackDate)}.` });
-    showToast("Sent back to factory");
-    setShowSendBack(false); setSendBackDate(""); setSendBackNote("");
+    await withApiCall(async () => {
+      await api.products.factorySendBack(p.id, sendBackDate, sendBackNote || undefined, p.version);
+      await refreshProducts();
+      addNotification({ targetRoles: ALL_ROLES, productId: p.id, productName: p.codeName, message: `${p.codeName} — sent back to factory, awaiting reply by ${fmtDate(sendBackDate)}.` });
+      showToast("Sent back to factory");
+      setShowSendBack(false); setSendBackDate(""); setSendBackNote("");
+    });
   }
 
   const caseLog = [...(fc?.caseLog ?? [])].reverse();
 
-  function markImprovementSample() {
-    const t = now();
+  async function markImprovementSample() {
     const nextVersion = (p.sampleVersion ?? 1) + 1;
-    setProducts((prev) => prev.map((x) => {
-      if (x.id !== p.id) return x;
-      const fc = x.factoryComm ?? defaultFactoryComm(t);
-      return {
-        ...x,
-        status: "Pending NPD" as Status,
-        sampleVersion: nextVersion,
-        statusChangedAt: t,
-        factoryComm: { ...fc, improvementSampleExpected: true, expectedReplyDate: improvSampleDate || fc.expectedReplyDate, caseLog: [...(fc.caseLog ?? []), { stage: "Factory Not Responded", note: `Improvement sample expected — will be tracked as v${nextVersion}${improvSampleDate ? ` · expected by ${fmtDate(improvSampleDate)}` : ""}`, timestamp: t }] },
-        activityLog: [...x.activityLog, { action: `Improvement sample expected (v${nextVersion}) — sent back to NPD Testing`, timestamp: t, stages: [`IMPROVEMENT SAMPLE v${nextVersion}: NPD PENDING`] }],
-      };
-    }));
-    addNotification({ targetRoles: ALL_ROLES, productId: p.id, productName: p.codeName, message: `${p.codeName} — improvement sample expected, v${nextVersion} sent to NPD Testing.` });
-    showToast(`Improvement sample v${nextVersion} — sent to NPD Testing`);
-    onClose();
+    await withApiCall(async () => {
+      await api.products.factoryImprovementSample(p.id, improvSampleDate || undefined, p.version);
+      await api.products.factoryCaseLog(p.id, "Factory Not Responded", `Improvement sample expected — will be tracked as v${nextVersion}${improvSampleDate ? ` · expected by ${fmtDate(improvSampleDate)}` : ""}`);
+      await refreshProducts();
+      addNotification({ targetRoles: ALL_ROLES, productId: p.id, productName: p.codeName, message: `${p.codeName} — improvement sample v${nextVersion} requested, awaiting factory.` });
+      showToast(`Improvement sample v${nextVersion} — awaiting factory`);
+      setImprovSampleTick(false); setImprovSampleDate("");
+    });
+  }
+
+  async function markImprovementSampleReceived() {
+    await withApiCall(async () => {
+      await api.products.factoryImprovementSampleReceived(p.id, receivedDate || undefined, p.version);
+      await api.products.factoryCaseLog(p.id, "Internal Decision Pending", `Improvement sample v${p.sampleVersion ?? 1} received (${fmtDate(receivedDate)}) — sent to NPD Testing`);
+      await refreshProducts();
+      addNotification({ targetRoles: ALL_ROLES, productId: p.id, productName: p.codeName, message: `Improvement sample v${p.sampleVersion ?? 1} received for ${p.codeName} — sent to NPD Testing.` });
+      showToast("Improvement sample received — sent to NPD Testing");
+      onClose();
+    });
   }
 
   return (
@@ -524,6 +512,24 @@ function HoldCaseDetail({ holdCase, isQA, isReadOnly, session, onClose, patchFC,
           <div className="rounded-md border border-amber-400/30 bg-amber-400/5 px-4 py-3">
             <p className="text-[10px] font-bold uppercase tracking-wide text-amber-500 mb-1">Original feedback from Decision Pending</p>
             <p className="text-sm text-amber-700 italic">"{p.verdictRemarks}"</p>
+          </div>
+        )}
+
+        {/* Revised sample has arrived from the factory — mark received to move it to NPD Testing */}
+        {canAct && fc?.improvementSampleExpected === true && !fc?.improvementSampleReceivedAt && (
+          <div className="rounded-md border border-purple-400/40 bg-purple-400/5 p-4 space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-purple-500">
+              Improvement sample v{p.sampleVersion ?? 1} — mark received
+            </p>
+            <p className="text-[11px] text-purple-500/70">Once the revised sample physically arrives, mark it received to send this product to NPD Testing.</p>
+            <div className="flex gap-2">
+              <input type="date" value={receivedDate} onChange={(e) => setReceivedDate(e.target.value)}
+                className="flex-1 rounded-md border border-purple-400/30 bg-white px-3 py-2 text-sm text-[#0f172a] outline-none focus:border-purple-400" />
+              <button onClick={markImprovementSampleReceived} disabled={busy}
+                className="rounded-md bg-purple-500 px-4 py-2 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-40">
+                Mark received → NPD Testing
+              </button>
+            </div>
           </div>
         )}
 
