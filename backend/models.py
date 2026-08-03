@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Date, ForeignKey, Text, Boolean, JSON
+from sqlalchemy import Column, Integer, String, DateTime, Date, ForeignKey, Text, Boolean, JSON, UniqueConstraint
 from datetime import datetime, timedelta
 from database import Base
 
@@ -74,9 +74,13 @@ class ActivityLog(Base):
 
 
 class NpdReport(Base):
+    """One report per sample version, so re-testing keeps the earlier reports
+    (and their attached files) instead of overwriting them."""
     __tablename__ = "npd_reports"
+    __table_args__ = (UniqueConstraint("product_id", "sample_version", name="uq_npd_report_product_version"),)
     id = Column(Integer, primary_key=True)
-    product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), unique=True)
+    product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), index=True)
+    sample_version = Column(Integer, nullable=False, default=1)
     file_name = Column(String)
     file_url = Column(String)
     outcome = Column(String, nullable=False)       # Pass | Not Pass

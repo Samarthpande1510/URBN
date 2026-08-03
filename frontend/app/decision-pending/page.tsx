@@ -165,7 +165,9 @@ function ReportModal({ p, onClose }: { p: ProductRow; onClose: () => void }) {
   if (!report) return null;
   const isPass = report.outcome === "Pass";
   const isPdf = report.fileName?.toLowerCase().endsWith(".pdf") ?? false;
-  const allReports = p.npdReports ?? [];
+  // Earlier versions only — the current version's report is rendered above.
+  const currentV = p.sampleVersion ?? 1;
+  const allReports = (p.npdReports ?? []).filter((r) => r.version !== currentV);
   const hasHistory = allReports.length > 0;
 
   if (fullscreen) {

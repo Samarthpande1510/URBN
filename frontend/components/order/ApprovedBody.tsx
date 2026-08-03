@@ -8,7 +8,7 @@ import { getSession, Session } from "@/lib/auth";
 import { useToast } from "@/components/Toast";
 import { GridBeam } from "@/components/ui/grid-beam";
 import { Modal } from "@/components/Modal";
-import { Plus, X } from "lucide-react";
+import { Plus, X, Pencil } from "lucide-react";
 
 const STAGE_PILL_STYLE: Record<string, string> = {
   "NPD TESTING: PENDING":        "bg-[#eff6ff] text-[#64748b] border-[#bfdbfe]/60",
@@ -129,7 +129,7 @@ function DeadlineBadge({ deadline }: { deadline?: string | null }) {
   return null;
 }
 
-type VerdictType = "place" | "hold" | "drop";
+type VerdictType = "place" | "hold" | "drop" | "edit";
 interface ColorRow { color: string; quantity: string }
 interface VerdictState { productId: number; type: VerdictType; colors: ColorRow[]; remarks: string }
 
@@ -293,7 +293,7 @@ function HeldRow({ p, canOrder, onDrop, onReinstate, onPlace }: {
   );
 }
 
-function PlacedRow({ p }: { p: ProductRow }) {
+function PlacedRow({ p, onEdit }: { p: ProductRow; onEdit: (id: number) => void }) {
   const od = p.orderDecision!;
   return (
     <tr className="border-b border-green-500/10">
@@ -322,10 +322,14 @@ function PlacedRow({ p }: { p: ProductRow }) {
         ) : <span className="text-xs text-[#94a3b8]">—</span>}
       </td>
       <td className="px-4 py-3">
-        <div className="flex flex-wrap gap-1">
+        <div className="flex flex-wrap items-center gap-1">
           {od.colors.length > 0 ? od.colors.map((c, i) => (
             <span key={i} className="rounded border border-green-500/30 bg-green-500/5 px-1.5 py-0.5 text-[10px] text-green-600">{c.color} ×{c.quantity}</span>
           )) : <span className="text-xs text-[#94a3b8]">—</span>}
+          <button onClick={() => onEdit(p.id)} title="Edit quantities"
+            className="ml-1 flex items-center gap-1 rounded border border-[#bfdbfe]/50 bg-[#eff6ff] px-1.5 py-0.5 text-[10px] text-[#1d4ed8] hover:bg-[#dbeafe] transition">
+            <Pencil size={10} /> Edit
+          </button>
         </div>
       </td>
       <td className="px-4 py-3 tabular-nums text-[#d97706] whitespace-nowrap text-xs">
@@ -371,6 +375,13 @@ export function ApprovedBody({ view = "all" }: { view?: ApprovedView }) {
     .sort((a, b) => (PRIORITY_ORDER[a.priority] ?? 4) - (PRIORITY_ORDER[b.priority] ?? 4));
 
   function openModal(id: number, type: VerdictType) {
+    if (type === "edit") {
+      const p = products.find((x) => x.id === id);
+      const existing = p?.orderDecision?.colors ?? [];
+      const colors = existing.length > 0 ? existing.map((c) => ({ color: c.color, quantity: String(c.quantity) })) : [{ color: "", quantity: "" }];
+      setModal({ productId: id, type, colors, remarks: "" });
+      return;
+    }
     setModal({ productId: id, type, colors: [{ color: "", quantity: "" }], remarks: "" });
   }
 
@@ -390,6 +401,12 @@ export function ApprovedBody({ view = "all" }: { view?: ApprovedView }) {
         await refreshProducts();
         addNotification({ targetRoles: ["CEO", "Dev", "Sales", "QA"], productId: p.id, productName: p.codeName, message: `Order placed for ${p.codeName} — Golden Sample started.` });
         showToast("Order placed — Golden Sample started");
+      } else if (modal.type === "edit") {
+        const validColors = modal.colors.filter((c) => c.color.trim()).map((c) => ({ color: c.color.trim(), quantity: parseInt(c.quantity) || 0 }));
+        await api.products.updateOrderColors(p.id, validColors, p.version);
+        await refreshProducts();
+        addNotification({ targetRoles: ["CEO", "Dev", "Sales", "QA"], productId: p.id, productName: p.codeName, message: `Order quantities updated for ${p.codeName}.` });
+        showToast("Order quantities updated");
       } else if (modal.type === "hold") {
         await api.products.patchOrderDecision(p.id, { state: "held", internal_code: od.internalCode, remarks: modal.remarks.trim() || od.remarks }, p.version);
         await refreshProducts();
@@ -583,7 +600,7 @@ export function ApprovedBody({ view = "all" }: { view?: ApprovedView }) {
                     </td>
                   </tr>
                 ) : (
-                  placedOrders.map((p) => <PlacedRow key={p.id} p={p} />)
+                  placedOrders.map((p) => <PlacedRow key={p.id} p={p} onEdit={(id) => openModal(id, "edit")} />)
                 )}
               </tbody>
             </table>
@@ -604,9 +621,11 @@ export function ApprovedBody({ view = "all" }: { view?: ApprovedView }) {
               <button onClick={closeModal} className="text-[#94a3b8] hover:text-[#1d4ed8] transition shrink-0"><X size={18} /></button>
             </div>
 
-            {modal.type === "place" && (
+            {(modal.type === "place" || modal.type === "edit") && (
               <div className="space-y-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-green-500">Place Order — colours &amp; quantities</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-green-500">
+                  {modal.type === "edit" ? "Update order — colours & quantities" : "Place Order — colours & quantities"}
+                </p>
                 <div className="space-y-2">
                   {modal.colors.map((row, i) => (
                     <div key={i} className="flex gap-2 items-center">
@@ -632,7 +651,7 @@ export function ApprovedBody({ view = "all" }: { view?: ApprovedView }) {
                 <div className="flex justify-start gap-2 pt-2">
                   <button onClick={confirmVerdict} disabled={!modal.colors.some((c) => c.color.trim())}
                     className="rounded-md bg-green-500 px-4 py-2 text-xs font-semibold text-white hover:bg-green-600 disabled:opacity-40 transition">
-                    Confirm Order → Golden Sample
+                    {modal.type === "edit" ? "Save changes" : "Confirm Order → Golden Sample"}
                   </button>
                   <button onClick={closeModal}
                     className="rounded-md border border-[#bfdbfe]/50 px-4 py-2 text-xs text-[#64748b] hover:bg-[#eff6ff] transition">

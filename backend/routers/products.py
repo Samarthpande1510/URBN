@@ -21,10 +21,42 @@ NOTIFY_ALL = ["CEO", "Dev", "Purchase"]
 
 CEO_NOTIFICATION_EMAIL = "samarthpande68@gmail.com"
 
+
+def _npd_reports(db: Session, product_id: int):
+    """All NPD reports for a product, newest sample version first."""
+    return (
+        db.query(NpdReport)
+        .filter(NpdReport.product_id == product_id)
+        .order_by(NpdReport.sample_version.desc())
+        .all()
+    )
+
+
+def _latest_npd(db: Session, product_id: int):
+    """The report for the most recent sample version, or None."""
+    return (
+        db.query(NpdReport)
+        .filter(NpdReport.product_id == product_id)
+        .order_by(NpdReport.sample_version.desc())
+        .first()
+    )
+
+
+def _serialize_npd(r):
+    return {
+        "sample_version": r.sample_version or 1,
+        "outcome": r.outcome,
+        "notes": r.notes,
+        "file_name": r.file_name,
+        "file_url": r.file_url,
+        "submitted_at": r.submitted_at.isoformat() if r.submitted_at else None,
+    }
+
+
 def _fire_rejection_email(p, actor, db: Session):
     """Send rejection email to the CEO notification address."""
     try:
-        npd = db.query(NpdReport).filter(NpdReport.product_id == p.id).first()
+        npd = _latest_npd(db, p.id)
         send_rejection_email(
             ceo_email=CEO_NOTIFICATION_EMAIL,
             ceo_name="Samarth",
@@ -238,7 +270,8 @@ def _serialize_golden_workflow(gw, db):
 def _serialize_product(p, db):
     od = db.query(OrderDecision).filter(OrderDecision.product_id == p.id).first()
     gw = db.query(GoldenWorkflow).filter(GoldenWorkflow.product_id == p.id).first()
-    npd = db.query(NpdReport).filter(NpdReport.product_id == p.id).first()
+    npd_all = _npd_reports(db, p.id)          # newest version first
+    npd = npd_all[0] if npd_all else None     # latest, for the singular field
     return {
         "id": p.id,
         "version": p.version or 1,
@@ -264,13 +297,8 @@ def _serialize_product(p, db):
         "created_at": p.created_at.isoformat() if p.created_at else None,
         "sample_version": p.sample_version or 1,
         "hidden": bool(p.hidden),
-        "npd_report": {
-            "outcome": npd.outcome,
-            "notes": npd.notes,
-            "file_name": npd.file_name,
-            "file_url": npd.file_url,
-            "submitted_at": npd.submitted_at.isoformat() if npd.submitted_at else None,
-        } if npd else None,
+        "npd_report": _serialize_npd(npd) if npd else None,
+        "npd_reports": [_serialize_npd(r) for r in npd_all],
         "order_decision": {
             "id": od.id,
             "state": od.state,
@@ -373,7 +401,13 @@ def submit_npd_report(
     check_and_bump(p, v)
 
     now = datetime.utcnow()
-    existing = db.query(NpdReport).filter(NpdReport.product_id == product_id).first()
+    version = p.sample_version or 1
+    # Upsert per sample version — resubmitting the same version corrects it,
+    # while a new version keeps the earlier reports and their files intact.
+    existing = db.query(NpdReport).filter(
+        NpdReport.product_id == product_id,
+        NpdReport.sample_version == version,
+    ).first()
     if existing:
         existing.outcome = data.outcome
         existing.notes = data.notes
@@ -384,6 +418,7 @@ def submit_npd_report(
     else:
         db.add(NpdReport(
             product_id=product_id,
+            sample_version=version,
             outcome=data.outcome,
             notes=data.notes,
             file_name=data.file_name,
@@ -823,6 +858,58 @@ def update_order_decision(
     od.decided_at = datetime.utcnow()
     log(db, product_id, f"Order decision updated: {data.state}", current_user)
     push_notification(db, product_id, p.code_name, f"Order decision updated: {data.state}.", NOTIFY_ALL)
+    db.commit()
+    db.refresh(od)
+    return od
+
+
+class OrderColorItem(BaseModel):
+    color: str
+    quantity: int
+
+
+class OrderColorsReq(BaseModel):
+    colors: list[OrderColorItem]
+
+
+def _fmt_colors(rows) -> str:
+    """Render a colours list for the activity log, tolerating legacy rows."""
+    parts = []
+    for c in rows or []:
+        if isinstance(c, dict):
+            parts.append(f"{c.get('color')} x{c.get('quantity')}")
+        else:
+            parts.append(f"{getattr(c, 'color', '?')} x{getattr(c, 'quantity', '?')}")
+    return ", ".join(parts) or "—"
+
+
+@router.patch("/{product_id}/order-decision/colors")
+def update_order_colors(
+    product_id: int,
+    data: OrderColorsReq,
+    v: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("CEO", "Dev", "Purchase")),
+):
+    """Update only the ordered colours/quantities.
+
+    Deliberately narrow: the general PATCH above overwrites remarks,
+    improvement_notes and improved_golden_sample_expected with whatever the
+    caller sends, so using it just to revise a quantity silently wipes them.
+    """
+    p = db.query(Product).filter(Product.id == product_id).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Product not found")
+    check_and_bump(p, v)
+    od = db.query(OrderDecision).filter(OrderDecision.product_id == product_id).first()
+    if not od:
+        raise HTTPException(status_code=404, detail="No order decision found")
+    new_colors = [c.model_dump() for c in data.colors]
+    before = _fmt_colors(od.colors)
+    after = _fmt_colors(new_colors)
+    od.colors = new_colors
+    log(db, product_id, f"Order quantities updated: {before} → {after}", current_user)
+    push_notification(db, product_id, p.code_name, f"{p.code_name} — order quantities updated: {after}.", NOTIFY_ALL)
     db.commit()
     db.refresh(od)
     return od

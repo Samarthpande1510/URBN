@@ -10,6 +10,7 @@ import { getDisplayStatusLabel, getDisplayStatusColor } from "@/lib/orderStatus"
 import { Chip } from "@/components/Chip";
 import { Modal } from "@/components/Modal";
 import { NpdForm } from "@/components/NpdForm";
+import { SpreadsheetPreview, isSpreadsheet } from "@/components/SpreadsheetPreview";
 import { getSession } from "@/lib/auth";
 import { GridBeam } from "@/components/ui/grid-beam";
 import { FileText, X } from "lucide-react";
@@ -177,6 +178,7 @@ function NpdReportsViewer({ reports, onClose }: { reports: VersionedReport[]; on
   const report = reports.find((r) => r.version === activeV);
   const isPass = report?.outcome === "Pass";
   const isPdf = report?.fileName?.toLowerCase().endsWith(".pdf") ?? false;
+  const isSheet = isSpreadsheet(report?.fileName);
 
   const tabs = (
     <div className="flex gap-1.5 flex-wrap px-5 pt-4 pb-3 border-b border-[#bfdbfe]/30">
@@ -213,7 +215,17 @@ function NpdReportsViewer({ reports, onClose }: { reports: VersionedReport[]; on
           {report?.notes ? <div className="rounded-md border border-[#bfdbfe]/40 bg-[#eff6ff] px-3 py-2.5 text-sm whitespace-pre-wrap leading-relaxed">{report.notes}</div> : <p className="text-xs text-[#94a3b8]">No observations recorded.</p>}
         </div>
         <div className="flex-1 overflow-hidden bg-[#f8faff]">
-          {isPdf && report?.fileDataUrl ? <iframe src={report.fileDataUrl} className="h-full w-full" title="NPD Report" /> : <div className="flex h-full items-center justify-center"><p className="text-sm text-[#94a3b8]">{report?.fileName ? "Not a PDF — no preview available." : "No file attached."}</p></div>}
+          {isPdf && report?.fileDataUrl ? (
+            <iframe src={report.fileDataUrl} className="h-full w-full" title="NPD Report" />
+          ) : isSheet && report?.fileDataUrl ? (
+            <div className="h-full overflow-auto p-4">
+              <SpreadsheetPreview url={report.fileDataUrl} fileName={report.fileName!} height="calc(100vh - 220px)" />
+            </div>
+          ) : (
+            <div className="flex h-full items-center justify-center">
+              <p className="text-sm text-[#94a3b8]">{report?.fileName ? "No preview available for this file type." : "No file attached."}</p>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -243,7 +255,18 @@ function NpdReportsViewer({ reports, onClose }: { reports: VersionedReport[]; on
             </div>
           ) : <p className="text-xs text-[#94a3b8]">No observations recorded.</p>}
           {isPdf && report.fileDataUrl && <iframe src={report.fileDataUrl} className="w-full rounded-md border border-[#bfdbfe]/40" style={{ height: 420 }} title="NPD Report" />}
-          {report.fileName && !isPdf && <p className="text-xs text-[#94a3b8]">File attached: {report.fileName} (no preview — not a PDF)</p>}
+          {isSheet && report.fileDataUrl && (
+            <div>
+              <p className="text-[10px] uppercase tracking-wide text-[#64748b] mb-1.5">{report.fileName}</p>
+              <SpreadsheetPreview url={report.fileDataUrl} fileName={report.fileName!} />
+            </div>
+          )}
+          {report.fileName && !isPdf && !isSheet && (
+            <p className="text-xs text-[#94a3b8]">
+              File attached: {report.fileName} —{" "}
+              <a href={report.fileDataUrl ?? "#"} target="_blank" rel="noopener noreferrer" className="text-[#1d4ed8] hover:underline">download</a>
+            </p>
+          )}
           {!report.fileName && <p className="text-xs text-[#94a3b8]">No file attached.</p>}
         </div>
       ) : <p className="px-5 py-4 text-xs text-[#94a3b8]">No report for this version.</p>}
@@ -489,13 +512,15 @@ export default function NpdTestingPage() {
         {prevReportsId && (() => {
           const rp = products.find((x) => x.id === prevReportsId);
           if (!rp) return null;
-          const archived = rp.npdReports ?? [];
-          // If no archived reports yet but product has a current npdReport, treat it as v(sampleVersion-1)
-          const prevV = (rp.sampleVersion ?? 1) - 1;
-          const synth = archived.length === 0 && rp.npdReport
-            ? [{ version: prevV, ...rp.npdReport }]
-            : archived;
-          const allReports = [...synth].sort((a, b) => b.version - a.version);
+          // Every version's report, newest first. Fall back to the singular
+          // npdReport only if the versioned list is empty.
+          const versioned = rp.npdReports ?? [];
+          const allReports = (versioned.length > 0
+            ? versioned
+            : rp.npdReport
+            ? [{ version: rp.sampleVersion ?? 1, ...rp.npdReport }]
+            : []
+          ).slice().sort((a, b) => b.version - a.version);
           return <NpdReportsViewer reports={allReports} onClose={() => setPrevReportsId(null)} />;
         })()}
       </Modal>

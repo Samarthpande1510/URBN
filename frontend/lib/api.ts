@@ -97,6 +97,8 @@ export const api = {
       apiFetch(`/products/${id}/order-decision`, "POST", data, v),
     patchOrderDecision: (id: number, data: unknown, v?: number) =>
       apiFetch(`/products/${id}/order-decision`, "PATCH", data, v),
+    updateOrderColors: (id: number, colors: { color: string; quantity: number }[], v?: number) =>
+      apiFetch(`/products/${id}/order-decision/colors`, "PATCH", { colors }, v),
     archiveOrder: (id: number, v?: number) =>
       apiFetch(`/products/${id}/order-decision/archive`, "POST", undefined, v),
     restore: (id: number, v?: number) =>
@@ -204,5 +206,18 @@ export const api = {
   files: {
     presign: (folder: string, content_type: string) =>
       apiFetch("/files/presign", "POST", { folder, content_type }),
+    /** Fetch a stored file's bytes same-origin (avoids R2 CORS) for in-app previews. */
+    content: async (url: string): Promise<ArrayBuffer> => {
+      const token = typeof window !== "undefined" ? localStorage.getItem("urbn_access_token") : null;
+      const res = await fetch(`${API}/files/content?url=${encodeURIComponent(url)}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) {
+        let detail = "Could not load the file.";
+        try { detail = (await res.json()).detail ?? detail; } catch { /* non-JSON error body */ }
+        throw new Error(detail);
+      }
+      return res.arrayBuffer();
+    },
   },
 };

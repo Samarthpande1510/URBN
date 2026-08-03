@@ -281,6 +281,17 @@ export function mapProductFromApi(raw: Record<string, unknown>): ProductRow {
       notes: (npd.notes as string) ?? "",
       submittedAt: npd.submitted_at as string,
     } : undefined,
+    // Every sample version's report, newest first (server already orders it).
+    npdReports: Array.isArray(raw.npd_reports)
+      ? (raw.npd_reports as Record<string, unknown>[]).map((r) => ({
+          version: (r.sample_version as number) ?? 1,
+          fileName: (r.file_name as string | null) ?? null,
+          fileDataUrl: (r.file_url as string | null) ?? null,
+          outcome: r.outcome as "Pass" | "Not Pass",
+          notes: (r.notes as string) ?? "",
+          submittedAt: r.submitted_at as string,
+        }))
+      : [],
     orderDecision: od ? {
       state: od.state as "pending" | "held" | "dropped" | "placed",
       internalCode: (od.internal_code as string) ?? "",
