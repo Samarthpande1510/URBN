@@ -65,8 +65,12 @@ def content(url: str = Query(...), current_user: User = Depends(get_current_user
     except HTTPException:
         raise
     except urllib.error.HTTPError as e:
-        raise HTTPException(status_code=404 if e.code == 404 else 502, detail="Could not fetch the file.")
-    except Exception:
-        raise HTTPException(status_code=502, detail="Could not fetch the file.")
+        # Surface the upstream status — a vague message here is undiagnosable.
+        raise HTTPException(
+            status_code=404 if e.code == 404 else 502,
+            detail=f"Storage returned HTTP {e.code} for this file.",
+        )
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Could not reach file storage ({type(e).__name__}).")
 
     return Response(content=body, media_type=ctype)

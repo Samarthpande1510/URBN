@@ -10,7 +10,9 @@ R2_ENDPOINT = os.getenv("R2_ENDPOINT")
 R2_ACCESS_KEY_ID = os.getenv("R2_ACCESS_KEY_ID")
 R2_SECRET_ACCESS_KEY = os.getenv("R2_SECRET_ACCESS_KEY")
 R2_BUCKET = os.getenv("R2_BUCKET", "urbn-files")
-R2_PUBLIC_BASE = os.getenv("R2_PUBLIC_BASE")  # e.g. https://pub-xxxx.r2.dev
+# Accept either name — .env files in use have both spellings, and getting this
+# wrong silently disables uploads with a "not configured" 503.
+R2_PUBLIC_BASE = os.getenv("R2_PUBLIC_BASE") or os.getenv("R2_PUBLIC_URL")  # e.g. https://pub-xxxx.r2.dev
 
 _client = None
 

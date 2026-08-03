@@ -206,8 +206,21 @@ export const api = {
   files: {
     presign: (folder: string, content_type: string) =>
       apiFetch("/files/presign", "POST", { folder, content_type }),
-    /** Fetch a stored file's bytes same-origin (avoids R2 CORS) for in-app previews. */
+    /**
+     * Read a stored file's bytes for in-app previews.
+     *
+     * R2 serves our bucket with CORS open to this origin, so the browser can
+     * fetch it directly — no server round-trip. The API proxy is only a
+     * fallback for when that isn't true (CORS turned off, a custom domain
+     * without it, or a bucket that isn't public).
+     */
     content: async (url: string): Promise<ArrayBuffer> => {
+      try {
+        const direct = await fetch(url);
+        if (direct.ok) return await direct.arrayBuffer();
+      } catch {
+        // CORS or network failure — fall through to the proxy.
+      }
       const token = typeof window !== "undefined" ? localStorage.getItem("urbn_access_token") : null;
       const res = await fetch(`${API}/files/content?url=${encodeURIComponent(url)}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
