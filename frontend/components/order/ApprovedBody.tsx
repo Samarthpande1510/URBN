@@ -189,9 +189,9 @@ function PendingRow({ p, canOrder, onAction }: {
         <td className="px-4 py-3">
           <div className="flex gap-1.5 flex-wrap">
             {([
-              { key: "place" as VerdictType, label: "✓ Place Order", cls: "border-green-500/30 bg-green-500/5 text-green-500 hover:bg-green-500/15" },
-              { key: "hold"  as VerdictType, label: "⏸ Hold",        cls: "border-[#bfdbfe]/50 bg-[#eff6ff] text-[#1d4ed8] hover:bg-[#dbeafe]" },
-              { key: "drop"  as VerdictType, label: "✕ Drop",        cls: "border-red-500/30 bg-red-500/5 text-red-400 hover:bg-red-500/15" },
+              { key: "place" as VerdictType, label: "Place Order", cls: "border-green-500/30 bg-green-500/5 text-green-500 hover:bg-green-500/15" },
+              { key: "hold"  as VerdictType, label: "Hold",        cls: "border-[#bfdbfe]/50 bg-[#eff6ff] text-[#1d4ed8] hover:bg-[#dbeafe]" },
+              { key: "drop"  as VerdictType, label: "Drop",        cls: "border-red-500/30 bg-red-500/5 text-red-400 hover:bg-red-500/15" },
             ]).map(({ key, label, cls }) => (
               <button key={key} onClick={() => onAction(p.id, key)}
                 className={`rounded border px-2.5 py-1 text-xs font-medium transition ${cls}`}>
@@ -270,7 +270,7 @@ function HeldRow({ p, canOrder, onDrop, onReinstate, onPlace }: {
           <div className="flex gap-1.5 flex-wrap">
             <button onClick={() => onPlace(p.id)}
               className="rounded border border-green-500/30 bg-green-500/5 px-2.5 py-1 text-xs font-medium text-green-500 hover:bg-green-500/15 transition">
-              ✓ Place Order
+              Place Order
             </button>
             <button onClick={() => onReinstate(p)}
               className="rounded border border-[#93c5fd]/50 bg-[#eff6ff] px-2.5 py-1 text-xs font-medium text-[#1d4ed8] hover:bg-[#dbeafe] transition">
@@ -278,7 +278,7 @@ function HeldRow({ p, canOrder, onDrop, onReinstate, onPlace }: {
             </button>
             <button onClick={() => onDrop(p.id)}
               className="rounded border border-red-500/30 bg-red-500/5 px-2.5 py-1 text-xs font-medium text-red-400 hover:bg-red-500/15 transition">
-              ✕ Drop
+              Drop
             </button>
           </div>
         </td>

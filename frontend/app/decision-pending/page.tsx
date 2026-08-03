@@ -505,9 +505,9 @@ export default function DecisionPendingPage() {
                           <td className="px-4 py-3">
                             <div className="flex gap-1.5 flex-wrap">
                               {([
-                                { type: "approve" as VerdictType, label: "✓ Approve", cls: "border-green-500/30 bg-green-500/5 text-green-500 hover:bg-green-500/15" },
-                                { type: "hold"    as VerdictType, label: "⏸ Hold",    cls: "border-[#bfdbfe]/50 bg-[#eff6ff] text-[#1d4ed8] hover:bg-[#dbeafe]" },
-                                { type: "reject"  as VerdictType, label: "✕ Reject",  cls: "border-red-500/30 bg-red-500/5 text-red-400 hover:bg-red-500/15" },
+                                { type: "approve" as VerdictType, label: "Approve", cls: "border-green-500/30 bg-green-500/5 text-green-500 hover:bg-green-500/15" },
+                                { type: "hold"    as VerdictType, label: "Hold",    cls: "border-[#bfdbfe]/50 bg-[#eff6ff] text-[#1d4ed8] hover:bg-[#dbeafe]" },
+                                { type: "reject"  as VerdictType, label: "Reject",  cls: "border-red-500/30 bg-red-500/5 text-red-400 hover:bg-red-500/15" },
                               ]).map(({ type, label, cls }) => (
                                 <button key={type} onClick={() => openVerdict(p.id, type)}
                                   className={`rounded border px-2.5 py-1 text-xs font-medium transition ${cls}`}>

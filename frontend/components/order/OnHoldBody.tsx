@@ -583,8 +583,8 @@ export function OnHoldBody() {
                             <div className="flex gap-1.5 flex-wrap">
                               {([
                                 { key: "order",    label: "Place Order",  style: v?.type === "order"    ? "border-green-500 bg-green-500/20 text-green-400"  : "border-[#bfdbfe]/50 bg-[#eff6ff] text-[#1d4ed8] hover:bg-[#dbeafe]" },
-                                { key: "approved", label: "→ Approved",   style: v?.type === "approved" ? "border-[#3b82f6] bg-[#3b82f6]/20 text-[#3b82f6]"  : "border-[#bfdbfe]/50 bg-[#eff6ff] text-[#1d4ed8] hover:bg-[#dbeafe]" },
-                                { key: "reject",   label: "✕ Reject",     style: v?.type === "reject"   ? "border-red-500 bg-red-500/20 text-red-400"         : "border-[#bfdbfe]/50 bg-[#eff6ff] text-[#1d4ed8] hover:bg-[#dbeafe]" },
+                                { key: "approved", label: "Approved",   style: v?.type === "approved" ? "border-[#3b82f6] bg-[#3b82f6]/20 text-[#3b82f6]"  : "border-[#bfdbfe]/50 bg-[#eff6ff] text-[#1d4ed8] hover:bg-[#dbeafe]" },
+                                { key: "reject",   label: "Reject",     style: v?.type === "reject"   ? "border-red-500 bg-red-500/20 text-red-400"         : "border-[#bfdbfe]/50 bg-[#eff6ff] text-[#1d4ed8] hover:bg-[#dbeafe]" },
                               ] as { key: VerdictType; label: string; style: string }[]).map(({ key, label, style }) => (
                                 <button key={key} onClick={() => openVerdict(p.id, key)}
                                   className={`rounded border px-2.5 py-1 text-xs font-medium transition ${style}`}>
