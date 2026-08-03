@@ -249,6 +249,12 @@ def _serialize_golden_workflow(gw, db):
         "rating_label_confirmed": gd.rating_label_confirmed if gd else False,
         "bom_confirmed": gd.bom_confirmed if gd else False,
         "details_saved_at": gd.saved_at.isoformat() if gd and gd.saved_at else None,
+        # Real per-confirmation tick times (not saved_at, which is the whole-record save).
+        "colour_confirmed_at": gd.colour_confirmed_at.isoformat() if gd and gd.colour_confirmed_at else None,
+        "logo_marking_confirmed_at": gd.logo_marking_confirmed_at.isoformat() if gd and gd.logo_marking_confirmed_at else None,
+        "rating_label_confirmed_at": gd.rating_label_confirmed_at.isoformat() if gd and gd.rating_label_confirmed_at else None,
+        "bom_confirmed_at": gd.bom_confirmed_at.isoformat() if gd and gd.bom_confirmed_at else None,
+        "confirmation_log": (gd.confirmation_log or []) if gd else [],
         "compliance_tracks": [
             {"confirmed_at": t.confirmed_at.isoformat() if t.confirmed_at else None}
             for t in ct
@@ -985,7 +991,7 @@ def place_order_from_hold(
         )
         db.add(od)
 
-    log(db, product_id, f"Order placed from On Hold ({internal_code}) — improvement requirement: {data.improvement_notes.strip()}", current_user)
+    log(db, product_id, f"Order placed from On Hold — improvement requirement: {data.improvement_notes.strip()}", current_user)
     push_notification(db, product_id, p.code_name, f"Order placed from On Hold. Improvement sample required.", NOTIFY_ALL)
     db.commit()
     return {"message": "Order placed", "internal_code": internal_code}

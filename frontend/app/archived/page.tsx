@@ -8,6 +8,7 @@ import { useProducts, ProductRow } from "@/lib/products-context";
 import { api, apiErrorMessage } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { getSession, Session } from "@/lib/auth";
+import { pendingConfirmationsPill, PENDING_PILL_PREFIX, PENDING_PILL_STYLE } from "@/lib/confirmations";
 
 const STAGE_PILL_STYLE: Record<string, string> = {
   "NPD TESTING: PENDING":    "bg-[#eff6ff] text-[#64748b] border-[#bfdbfe]/60",
@@ -76,6 +77,7 @@ function getPipelineTrail(p: ProductRow): string[] {
     if (gw.orderConfirmedAt) stages.push("ORDER CONFIRMED");
     if (gw.details) stages.push("PRODUCT DETAILS SAVED");
     if (gw.details?.bomConfirmedAt) stages.push("BOM CONFIRMED");
+    { const pend = pendingConfirmationsPill(p); if (pend) stages.push(pend); }
     const compTracks = gw.compliance?.tracks ?? [];
     if (compTracks.length > 0) stages.push(compTracks.every((t) => t.confirmedAt) ? "COMPLIANCE CONFIRMED" : "COMPLIANCE INITIATED");
     if (gw.packaging?.kldEmailedToDesignerAt) stages.push("PACKAGING RELEASED");
@@ -204,7 +206,7 @@ export default function ArchivedPage() {
                       </p>
                       <div className="mt-1.5 flex flex-wrap gap-1">
                         {getPipelineTrail(p).map((s, i) => (
-                          <span key={i} className={`inline-block rounded border px-1.5 py-0.5 text-[10px] font-medium leading-tight whitespace-nowrap ${STAGE_PILL_STYLE[s] ?? DEFAULT_PILL}`}>
+                          <span key={i} className={`inline-block rounded border px-1.5 py-0.5 text-[10px] font-medium leading-tight whitespace-nowrap ${s.startsWith(PENDING_PILL_PREFIX) ? PENDING_PILL_STYLE : (STAGE_PILL_STYLE[s] ?? DEFAULT_PILL)}`}>
                             {s}
                           </span>
                         ))}

@@ -36,7 +36,7 @@ function OrderForm({ p, onDone }: { p: ProductRow; onDone: () => void }) {
       await api.golden.notifyPurchase(p.id, p.version + 1);
       await api.golden.confirmOrder(p.id, p.version + 2);
       await refreshProducts();
-      addNotification({ targetRoles: ["CEO", "Dev", "Sales", "QA"], productId: p.id, productName: p.codeName, message: `Order placed for ${p.codeName} (${od.internalCode}) — moving to Golden Sample.` });
+      addNotification({ targetRoles: ["CEO", "Dev", "Sales", "QA"], productId: p.id, productName: p.codeName, message: `Order placed for ${p.codeName} — moving to Golden Sample.` });
       showToast("Order placed — moved to Golden Sample");
       onDone();
     } catch (e: unknown) { const { message, isConflict } = apiErrorMessage(e); if (isConflict) await refreshProducts(); showToast(isConflict ? message : `Error: ${message}`); }

@@ -146,6 +146,9 @@ export const api = {
       apiFetch(`/golden/${productId}/confirm-order`, "POST", undefined, v),
     saveDetails: (productId: number, data: unknown, v?: number) =>
       apiFetch(`/golden/${productId}/details`, "POST", data, v),
+    /** Tick/untick one Part 1 confirmation, recorded with who and when. */
+    setConfirmation: (productId: number, field: string, value: boolean) =>
+      apiFetch(`/golden/${productId}/details/confirmation`, "POST", { field, value }),
     setComplianceNotNeeded: (productId: number, v?: number) =>
       apiFetch(`/golden/${productId}/compliance-not-needed`, "POST", undefined, v),
     setComplianceNeeded: (productId: number, v?: number) =>

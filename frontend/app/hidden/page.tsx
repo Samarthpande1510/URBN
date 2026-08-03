@@ -9,6 +9,7 @@ import { PRIORITY_DOT } from "@/lib/colors";
 import { getDisplayStatusLabel, getDisplayStatusColor } from "@/lib/orderStatus";
 import { Chip } from "@/components/Chip";
 import { EyeOff, Eye } from "lucide-react";
+import { pendingConfirmationsPill, PENDING_PILL_PREFIX, PENDING_PILL_STYLE } from "@/lib/confirmations";
 
 // Mirrors the dashboard's pill styles + pipeline trail so hidden rows look identical.
 const STAGE_PILL_STYLE: Record<string, string> = {
@@ -46,7 +47,7 @@ function StagePills({ stages }: { stages: string[] }) {
   return (
     <div className="flex flex-wrap gap-1">
       {stages.map((s, i) => (
-        <span key={i} className={`inline-block rounded border px-1.5 py-0.5 text-[10px] font-medium leading-tight whitespace-nowrap ${STAGE_PILL_STYLE[s] ?? DEFAULT_PILL}`}>
+        <span key={i} className={`inline-block rounded border px-1.5 py-0.5 text-[10px] font-medium leading-tight whitespace-nowrap ${s.startsWith(PENDING_PILL_PREFIX) ? PENDING_PILL_STYLE : (STAGE_PILL_STYLE[s] ?? DEFAULT_PILL)}`}>
           {s}
         </span>
       ))}
@@ -93,6 +94,7 @@ function getPipelineTrail(p: ProductRow): string[] {
     if (gw.orderConfirmedAt) stages.push("ORDER CONFIRMED");
     if (gw.details) stages.push("PRODUCT DETAILS SAVED");
     if (gw.details?.bomConfirmedAt) stages.push("BOM CONFIRMED");
+    { const pend = pendingConfirmationsPill(p); if (pend) stages.push(pend); }
     const compTracks = gw.compliance?.tracks ?? [];
     if (compTracks.length > 0) stages.push(compTracks.every((t) => t.confirmedAt) ? "COMPLIANCE CONFIRMED" : "COMPLIANCE INITIATED");
     if (gw.packaging?.kldEmailedToDesignerAt) stages.push("PACKAGING RELEASED");

@@ -161,11 +161,21 @@ class GoldenDetails(Base):
     sku_code = Column(String)
     colour = Column(String)
     markings = Column(String)
-    # Part 1 confirmations (all four required to unlock compliance/packaging/golden sample)
+    # Part 1 confirmations. These no longer gate compliance/packaging — those run
+    # in parallel — but each one is tracked individually so it's clear what's
+    # still outstanding and when it was signed off.
     colour_confirmed = Column(Boolean, default=False)
     logo_marking_confirmed = Column(Boolean, default=False)
     rating_label_confirmed = Column(Boolean, default=False)
     bom_confirmed = Column(Boolean, default=False)
+    # When each box was actually ticked. Previously the UI showed saved_at for
+    # all four, so every confirmation appeared to happen at the same moment.
+    colour_confirmed_at = Column(DateTime)
+    logo_marking_confirmed_at = Column(DateTime)
+    rating_label_confirmed_at = Column(DateTime)
+    bom_confirmed_at = Column(DateTime)
+    # Append-only audit trail: [{field, action: "ticked"|"unticked", by, at}, ...]
+    confirmation_log = Column(JSON, default=list)
     saved_at = Column(DateTime, default=datetime.utcnow)
 
 

@@ -108,6 +108,15 @@ export interface ComplianceTrack {
   log: ActivityEntry[];
 }
 
+/** One tick or untick of a Part 1 confirmation, for the audit trail. */
+export interface ConfirmationLogEntry {
+  field: string;
+  label: string;
+  action: "ticked" | "unticked";
+  by: string;
+  at: string;
+}
+
 export interface GoldenWorkflow {
   purchaseNotifiedAt: string | null;
   orderConfirmedAt: string | null;
@@ -120,6 +129,7 @@ export interface GoldenWorkflow {
     logoMarkingConfirmedAt: string | null;
     ratingLabelConfirmedAt: string | null;
     bomConfirmedAt: string | null;
+    confirmationLog?: ConfirmationLogEntry[];
     savedAt: string;
   } | null;
 
@@ -313,10 +323,13 @@ export function mapProductFromApi(raw: Record<string, unknown>): ProductRow {
       details: gw.details_saved ? {
         productName: "",
         skuCode: "",
-        colourConfirmedAt: gw.colour_confirmed ? (gw.details_saved_at as string ?? "yes") : null,
-        logoMarkingConfirmedAt: gw.logo_marking_confirmed ? (gw.details_saved_at as string ?? "yes") : null,
-        ratingLabelConfirmedAt: gw.rating_label_confirmed ? (gw.details_saved_at as string ?? "yes") : null,
-        bomConfirmedAt: gw.bom_confirmed ? (gw.details_saved_at as string ?? "yes") : null,
+        // Real tick times; fall back to the record save time for rows confirmed
+        // before per-field timestamps existed.
+        colourConfirmedAt: gw.colour_confirmed ? ((gw.colour_confirmed_at as string) ?? (gw.details_saved_at as string) ?? "yes") : null,
+        logoMarkingConfirmedAt: gw.logo_marking_confirmed ? ((gw.logo_marking_confirmed_at as string) ?? (gw.details_saved_at as string) ?? "yes") : null,
+        ratingLabelConfirmedAt: gw.rating_label_confirmed ? ((gw.rating_label_confirmed_at as string) ?? (gw.details_saved_at as string) ?? "yes") : null,
+        bomConfirmedAt: gw.bom_confirmed ? ((gw.bom_confirmed_at as string) ?? (gw.details_saved_at as string) ?? "yes") : null,
+        confirmationLog: Array.isArray(gw.confirmation_log) ? (gw.confirmation_log as ConfirmationLogEntry[]) : [],
         savedAt: (gw.details_saved_at as string) ?? "",
       } : null,
       compliance: Array.isArray(gw.compliance_tracks) && (gw.compliance_tracks as unknown[]).length > 0 ? {

@@ -5,12 +5,13 @@ import { parseServerDate } from "@/lib/datetime";
 import { ChevronDown, ChevronUp, CheckCircle, Circle, X } from "lucide-react";
 import { GridBeam } from "@/components/ui/grid-beam";
 import { AppShell } from "@/components/AppShell";
-import { useProducts, ProductRow, GoldenWorkflow, GoldenSampleStatus, ActivityEntry, ComplianceCertName, ComplianceTrack } from "@/lib/products-context";
+import { useProducts, ProductRow, GoldenWorkflow, GoldenSampleStatus, ActivityEntry, ComplianceCertName, ComplianceTrack, ConfirmationLogEntry } from "@/lib/products-context";
 import { api, apiErrorMessage } from "@/lib/api";
 import { PRIORITY_DOT } from "@/lib/colors";
 import { Chip } from "@/components/Chip";
 import type { Role } from "@/lib/auth";
 import { useToast } from "@/components/Toast";
+import { pendingConfirmationsPill, PENDING_PILL_PREFIX, PENDING_PILL_STYLE } from "@/lib/confirmations";
 
 function fmt(v: string | null) {
   if (!v) return null;
@@ -58,7 +59,7 @@ function StagePills({ stages }: { stages: string[] }) {
   return (
     <div className="flex flex-wrap gap-1">
       {stages.map((s, i) => (
-        <span key={i} className={`inline-block rounded border px-1.5 py-0.5 text-[10px] font-medium leading-tight whitespace-nowrap ${STAGE_PILL_STYLE[s] ?? DEFAULT_PILL}`}>
+        <span key={i} className={`inline-block rounded border px-1.5 py-0.5 text-[10px] font-medium leading-tight whitespace-nowrap ${s.startsWith(PENDING_PILL_PREFIX) ? PENDING_PILL_STYLE : (STAGE_PILL_STYLE[s] ?? DEFAULT_PILL)}`}>
           {s}
         </span>
       ))}
@@ -102,6 +103,7 @@ function getPipelineTrail(p: ProductRow): string[] {
     if (gw.orderConfirmedAt) stages.push("ORDER CONFIRMED");
     if (gw.details) stages.push("PRODUCT DETAILS SAVED");
     if (gw.details?.bomConfirmedAt) stages.push("BOM CONFIRMED");
+    { const pend = pendingConfirmationsPill(p); if (pend) stages.push(pend); }
     const compTracks = gw.compliance?.tracks ?? [];
     if (compTracks.length > 0) stages.push(compTracks.every((t) => t.confirmedAt) ? "COMPLIANCE CONFIRMED" : "COMPLIANCE INITIATED");
     if (gw.packaging?.kldEmailedToDesignerAt) stages.push("PACKAGING RELEASED");
@@ -373,11 +375,8 @@ function GoldenCard({ product, isQA }: { product: ProductRow; isQA: boolean }) {
   const NOTIFY_ALL: Role[] = ["CEO", "Dev", "Sales", "QA"];
 
   const allConfirmed = detailDraft.colourConfirmed && detailDraft.logoMarkingConfirmed && detailDraft.ratingLabelConfirmed && detailDraft.bomConfirmed;
-  const isFirstSave = !gw.details; // details haven't been saved yet
-  // First save: all fields + all 4 confirmations required. Re-saves: always allowed.
-  const canSaveDetails = isFirstSave
-    ? detailDraft.productName.trim().length > 0 && urbnModelDraft.trim().length > 0 && allConfirmed
-    : true;
+  // Confirmations no longer gate anything — only the two name fields are required.
+  const canSaveDetails = detailDraft.productName.trim().length > 0 && urbnModelDraft.trim().length > 0;
 
   async function saveDetails() {
     try {
@@ -399,19 +398,31 @@ function GoldenCard({ product, isQA }: { product: ProductRow; isQA: boolean }) {
         await api.products.update(product.id, updates, product.version).catch(() => {});
       }
       await refreshProducts();
-      if (allConfirmed) {
-        addNotification({ targetRoles: NOTIFY_ALL, productId: product.id, productName: product.codeName, message: `Product details confirmed — sent to Compliance and Packaging Development.` });
-        showToast("Details saved — product sent to Compliance & Packaging");
-      } else {
-        addNotification({ targetRoles: NOTIFY_ALL, productId: product.id, productName: product.codeName, message: `Product details saved (confirmations pending).` });
-        showToast("Details saved");
-      }
+      addNotification({ targetRoles: NOTIFY_ALL, productId: product.id, productName: product.codeName, message: `Product details saved.` });
+      showToast("Details saved");
     } catch (e: unknown) { const { message, isConflict } = apiErrorMessage(e); if (isConflict) await onRefresh(); showToast(isConflict ? message : `Error: ${message}`); }
   }
 
+  // Each confirmation saves on its own, timestamped server-side.
+  const [savingKey, setSavingKey] = useState<string | null>(null);
+  async function toggleConfirmation(apiField: string, key: keyof typeof detailDraft, value: boolean, label: string) {
+    setSavingKey(apiField);
+    setDetailDraft((d) => ({ ...d, [key]: value }));   // optimistic
+    try {
+      await api.golden.setConfirmation(product.id, apiField, value);
+      await onRefresh();
+      showToast(value ? `${label} confirmed` : `${label} un-confirmed`);
+    } catch (e: unknown) {
+      setDetailDraft((d) => ({ ...d, [key]: !value })); // roll back
+      const { message, isConflict } = apiErrorMessage(e);
+      if (isConflict) await onRefresh();
+      showToast(isConflict ? message : `Error: ${message}`);
+    } finally {
+      setSavingKey(null);
+    }
+  }
+
   const detailsLocked = false;
-  const part1Done = !!gw.details && [gw.details.colourConfirmedAt, gw.details.logoMarkingConfirmedAt, gw.details.ratingLabelConfirmedAt, gw.details.bomConfirmedAt].every(Boolean);
-  const stage3Locked = !part1Done;
   const compDone = !!gw.compliance?.tracks.length && gw.compliance.tracks.every((tr) => !!tr.confirmedAt);
 
   const stagesDone = [!!gw.details, compDone, !!gw.packaging?.kldEmailedToDesignerAt, gw.goldenSample?.status === "Received"];
@@ -553,27 +564,29 @@ function GoldenCard({ product, isQA }: { product: ProductRow; isQA: boolean }) {
               {/* Confirmation ticks — colour, logo/marking, rating label, BOM */}
               <div className="space-y-2 pt-1">
                 {([
-                  { key: "colourConfirmed" as const, atKey: "colourConfirmedAt" as const, label: "Colour confirmation" },
-                  { key: "logoMarkingConfirmed" as const, atKey: "logoMarkingConfirmedAt" as const, label: "Logo/marking placement confirmation" },
-                  { key: "ratingLabelConfirmed" as const, atKey: "ratingLabelConfirmedAt" as const, label: "Rating label confirmation" },
-                  { key: "bomConfirmed" as const, atKey: "bomConfirmedAt" as const, label: "BOM confirmation" },
-                ]).map(({ key, atKey, label }) => {
-                  const checked = detailDraft[key];
+                  { key: "colourConfirmed" as const, atKey: "colourConfirmedAt" as const, apiField: "colour", label: "Colour confirmation" },
+                  { key: "logoMarkingConfirmed" as const, atKey: "logoMarkingConfirmedAt" as const, apiField: "logo_marking", label: "Logo/marking placement confirmation" },
+                  { key: "ratingLabelConfirmed" as const, atKey: "ratingLabelConfirmedAt" as const, apiField: "rating_label", label: "Rating label confirmation" },
+                  { key: "bomConfirmed" as const, atKey: "bomConfirmedAt" as const, apiField: "bom", label: "BOM confirmation" },
+                ]).map(({ key, atKey, apiField, label }) => {
+                  const checked = detailDraft[key] as boolean;
                   const confirmedAt = gw.details?.[atKey];
-                  const locked = !!confirmedAt; // once saved as confirmed, cannot be unticked
+                  const saving = savingKey === apiField;
                   return (
-                    <label key={key} className={`flex items-center justify-between gap-3 rounded-md border px-4 py-3 ${locked ? "cursor-default" : checked ? "cursor-pointer" : "cursor-pointer"} ${checked ? "border-green-500/30 bg-green-500/5" : "border-[#bfdbfe]/40 bg-[#eff6ff]"}`}>
+                    <label key={key} className={`flex items-center justify-between gap-3 rounded-md border px-4 py-3 cursor-pointer ${checked ? "border-green-500/30 bg-green-500/5" : "border-[#bfdbfe]/40 bg-[#eff6ff]"}`}>
                       <div>
                         <p className="text-xs font-medium text-[#0f172a]">{label}</p>
-                        {checked && confirmedAt
+                        {saving
+                          ? <p className="text-xs text-[#94a3b8] mt-0.5">Saving…</p>
+                          : checked && confirmedAt
                           ? <p className="text-xs text-green-400 flex items-center gap-1 mt-0.5"><CheckCircle size={11} /> Confirmed {fmt(confirmedAt)}</p>
-                          : <p className="text-xs text-[#94a3b8] mt-0.5">{checked ? "Will be confirmed on save" : "Not confirmed"}</p>}
+                          : <p className="text-xs text-[#94a3b8] mt-0.5">Not confirmed</p>}
                       </div>
                       <input
                         type="checkbox"
                         checked={checked}
-                        disabled={isQA || locked}
-                        onChange={(e) => !locked && setDetailDraft((d) => ({ ...d, [key]: e.target.checked }))}
+                        disabled={isQA || saving}
+                        onChange={(e) => toggleConfirmation(apiField, key, e.target.checked, label)}
                         className="h-4 w-4 rounded accent-green-500 shrink-0 disabled:opacity-60 disabled:cursor-not-allowed"
                       />
                     </label>
@@ -581,21 +594,24 @@ function GoldenCard({ product, isQA }: { product: ProductRow; isQA: boolean }) {
                 })}
               </div>
 
+              <ConfirmationHistory log={gw.details?.confirmationLog ?? []} />
+
               {!isQA && (
                 <div className="space-y-1.5">
                   {!canSaveDetails && (
                     <p className="text-[11px] text-[#94a3b8] text-center">
-                      {!detailDraft.productName.trim() || !urbnModelDraft.trim()
-                        ? "Fill in URBN Product Name and SKU Code to continue"
-                        : "Tick all 4 confirmations to send to Compliance & Packaging"}
+                      Fill in URBN Product Name and SKU Code to continue
                     </p>
                   )}
+                  <p className="text-[11px] text-[#94a3b8] text-center">
+                    Each confirmation saves the moment you tick it.
+                  </p>
                   <button
                     onClick={saveDetails}
                     disabled={!canSaveDetails}
                     className="w-full rounded-md bg-[#2563eb] py-2.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition"
                   >
-                    {canSaveDetails ? "Save details & send to Compliance + Packaging" : "Save details"}
+                    Save details
                   </button>
                 </div>
               )}
@@ -605,12 +621,6 @@ function GoldenCard({ product, isQA }: { product: ProductRow; isQA: boolean }) {
             </div>
           )}
         </div>
-
-        {gw.orderConfirmedAt && !part1Done && (
-          <div className="rounded-md border border-dashed border-[#bfdbfe]/50 px-5 py-4 text-xs text-[#64748b]">
-            Complete Part 1 confirmations to unlock compliance, packaging, and golden sample.
-          </div>
-        )}
 
       </div>
     </GridBeam>
@@ -642,6 +652,44 @@ function getPackagingTrail(pk: GoldenWorkflow["packaging"]): { label: string; cl
   if (pk.kldAcknowledgedAt) t.push({ label: "KLD acknowledged", cls: sky });
   if (pk.kldEmailedToDesignerAt) t.push({ label: "KLD sent to designer", cls: green });
   return t;
+}
+
+/** Audit trail of every Part 1 confirmation tick/untick, newest first. */
+function ConfirmationHistory({ log }: { log: ConfirmationLogEntry[] }) {
+  const [open, setOpen] = useState(false);
+  if (log.length === 0) return null;
+  const entries = [...log].reverse();
+  const latest = entries[0];
+
+  return (
+    <div className="rounded-md border border-[#bfdbfe]/40 bg-[#f8faff] px-3 py-2">
+      <button onClick={() => setOpen((s) => !s)} className="flex w-full items-center justify-between gap-2 text-left">
+        <span className="text-[11px] text-[#64748b]">
+          Last updated {fmt(latest.at)} — {latest.label} {latest.action} by {latest.by}
+        </span>
+        <span className="shrink-0 text-[11px] text-[#1d4ed8] hover:underline">
+          {open ? "Hide" : `History (${log.length})`}
+        </span>
+      </button>
+      {open && (
+        <ul className="mt-2 space-y-1 border-t border-[#bfdbfe]/30 pt-2">
+          {entries.map((e, i) => (
+            <li key={i} className="flex items-start gap-2 text-[11px]">
+              <span className={`mt-0.5 shrink-0 rounded px-1.5 py-0.5 font-medium ${
+                e.action === "ticked"
+                  ? "bg-green-500/10 text-green-600 border border-green-500/25"
+                  : "bg-amber-500/10 text-amber-600 border border-amber-500/25"}`}>
+                {e.action === "ticked" ? "✓" : "↺"}
+              </span>
+              <span className="text-[#0f172a]">
+                {e.label} <span className="text-[#64748b]">{e.action} by {e.by} · {fmt(e.at)}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
 }
 
 // ─── Packaging Development card ───────────────────────────────────────────────
@@ -1571,12 +1619,13 @@ type GoldenFilter = "All" | "Golden Sample" | "Compliance" | "Packaging Developm
 
 function getWorkflowStage(p: ProductRow): { inGoldenSample: boolean; inCompliance: boolean; inPackaging: boolean } {
   const gw = p.goldenWorkflow!;
-  const part1Done = !!gw.details && [gw.details.colourConfirmedAt, gw.details.logoMarkingConfirmedAt, gw.details.ratingLabelConfirmedAt, gw.details.bomConfirmedAt].every(Boolean);
   const compDone = !!gw.compliance?.tracks.length && gw.compliance.tracks.every((tr) => !!tr.confirmedAt);
+  // Compliance and Packaging run in parallel with the Part 1 confirmations — a
+  // product is available to both as soon as it reaches Golden Sample.
   return {
     inGoldenSample: true,
-    inCompliance: part1Done && !compDone && !gw.complianceNotNeeded,
-    inPackaging: part1Done && !gw.packaging?.kldEmailedToDesignerAt,
+    inCompliance: !compDone && !gw.complianceNotNeeded,
+    inPackaging: !gw.packaging?.kldEmailedToDesignerAt,
   };
 }
 
@@ -1786,9 +1835,6 @@ export default function GoldenProductPage() {
                           )}
                         </p>
                         <p className="text-xs text-[#64748b] mt-0.5">{p.factory ?? p.skuCode}</p>
-                        {p.orderDecision?.internalCode && (
-                          <span className="inline-block mt-1 text-[10px] font-mono bg-[#eff6ff] border border-[#93c5fd]/30 text-[#3b82f6] px-1.5 py-0.5 rounded">{p.orderDecision.internalCode}</span>
-                        )}
                       </td>
                       {filter !== "Compliance" && filter !== "Packaging Development" && filter !== "Golden Sample" && (
                         <td className="px-4 py-3">

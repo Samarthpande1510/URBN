@@ -230,6 +230,67 @@ def save_details(
     return {"message": "Details saved"}
 
 
+CONFIRMATION_FIELDS = {
+    "colour": "Colour confirmation",
+    "logo_marking": "Logo/marking placement confirmation",
+    "rating_label": "Rating label confirmation",
+    "bom": "BOM confirmation",
+}
+
+
+class ConfirmationReq(BaseModel):
+    field: str      # colour | logo_marking | rating_label | bom
+    value: bool
+
+
+@router.post("/{product_id}/details/confirmation")
+def set_confirmation(
+    product_id: int,
+    data: ConfirmationReq,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("CEO", "Dev", "Purchase")),
+):
+    """Tick or untick one Part 1 confirmation, recording when and by whom.
+
+    Separate from save_details because that writes all four at once and so
+    cannot tell which one actually changed — which is what the history needs.
+    """
+    if data.field not in CONFIRMATION_FIELDS:
+        raise HTTPException(status_code=400, detail="Unknown confirmation field.")
+
+    wf = get_workflow_or_404(product_id, db)
+    p = db.query(Product).filter(Product.id == product_id).first()
+    details = db.query(GoldenDetails).filter(GoldenDetails.workflow_id == wf.id).first()
+    if not details:
+        # Ticking before the details form has been saved — create the row so a
+        # confirmation is never silently dropped.
+        details = GoldenDetails(workflow_id=wf.id, product_name="", sku_code="", colour="", markings="")
+        db.add(details)
+        db.flush()
+
+    now = datetime.utcnow()
+    label = CONFIRMATION_FIELDS[data.field]
+    setattr(details, f"{data.field}_confirmed", data.value)
+    setattr(details, f"{data.field}_confirmed_at", now if data.value else None)
+
+    entry = {
+        "field": data.field,
+        "label": label,
+        "action": "ticked" if data.value else "unticked",
+        "by": current_user.name,
+        "at": now.isoformat(),
+    }
+    # Reassign rather than append so SQLAlchemy sees the JSON column change.
+    details.confirmation_log = list(details.confirmation_log or []) + [entry]
+    details.saved_at = now
+
+    verb = "confirmed" if data.value else "un-confirmed"
+    log(db, product_id, f"{label} {verb}", current_user)
+    push_notification(db, product_id, p.code_name, f"{p.code_name} — {label} {verb}.", NOTIFY_ALL)
+    db.commit()
+    return {"message": "Saved", "field": data.field, "value": data.value, "at": now.isoformat()}
+
+
 # ── compliance not needed ─────────────────────────────────────────────────
 
 @router.post("/{product_id}/compliance-not-needed")
